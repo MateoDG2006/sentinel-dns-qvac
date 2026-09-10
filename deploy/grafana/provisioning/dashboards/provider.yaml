@@ -1,0 +1,20 @@
+# Proveedor de dashboards versionados.
+#
+# Carga todos los .json de este directorio en la carpeta "Sentinel-DNS" al
+# arrancar Grafana. El dashboard vive en git, no en la base de Grafana.
+
+apiVersion: 1
+
+providers:
+  - name: sentinel-dns
+    orgId: 1
+    folder: Sentinel-DNS
+    type: file
+    # El dashboard es codigo: no se borra ni se edita desde la interfaz, para
+    # que un checkout limpio produzca siempre la misma vista.
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false
