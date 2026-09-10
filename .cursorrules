@@ -17,6 +17,7 @@ Lee `AGENTS.md`, `PLAN_IMPLEMENTACION_SENTINEL_DNS.md`, `docs/ARCHITECTURE.md`, 
 - Wazuh recibe eventos por `POST /events` con JWT y batching.
 - No agregues dependencias ni cambies contratos compartidos sin registrar la decisión.
 - Conserva cambios ajenos y limita la edición al workstream asignado.
+- Constantes en `app/constants/<tipo>.py`. Funciones sueltas: clase del módulo o `app/utils/<tipo>.py`. No reexportar helpers sueltos.
 - Ejecuta verificaciones aplicables y reporta comandos, resultados y pendientes.
 - No declares éxito si una verificación requerida no fue ejecutada.
 
