@@ -307,9 +307,11 @@ def _build_beaconing(ctx: ScenarioContext) -> list[SyntheticQuery]:
     end = ctx.start_offset_s + ctx.duration_s
     for client in _client_pool(rng, 4):
         domain = domains.beaconing_domain(rng)
-        # Intervalos cortos para que una ventana de 60 s contenga suficientes
-        # repeticiones como para que la heuristica mida periodicidad y jitter.
-        interval = float(rng.choice((5, 8, 12)))
+        # Intervalos <= 7 s para que una ventana de 60 s deje al menos las 8
+        # repeticiones que exige `beaconing.query_count_min` de features.yaml,
+        # y >= 4 s por `beaconing.interval_min_ms`.
+        interval = float(rng.choice((5, 6, 7)))
+        # Jitter del 3 %, holgadamente bajo el `jitter_ratio_max` de 0.12.
         jitter = interval * 0.03
         truth = GroundTruth(scenario="beaconing", threat_type="beaconing")
         tick = ctx.start_offset_s + rng.uniform(0.0, interval)

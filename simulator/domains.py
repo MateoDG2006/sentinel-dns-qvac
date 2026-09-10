@@ -37,14 +37,35 @@ COMMON_LABELS: tuple[str, ...] = (
 )
 
 # Marcas ficticias autorizadas para generar typosquatting.
-# No corresponden a ninguna entidad real. Fuente de verdad provisional hasta
-# que exista ``config/brands.yaml`` (coordinar con el frente A / tarea A3).
+# No corresponden a ninguna entidad real.
+#
+# IMPORTANTE: esta lista debe ser identica a `config/brands.yaml`, que consume
+# el detector del frente A (tarea A3). Si divergen, el simulador genera
+# variantes que el detector no reconoce. Copiada de esa fuente de verdad;
+# reemplazar por lectura del YAML cuando A3 este en main.
 FICTIONAL_BRANDS: tuple[str, ...] = (
-    "examplebank", "acmeshop", "globexmail", "initechcloud", "umbrellahealth",
-    "hooliapp", "piedpiper", "soylentfoods", "wonkaindustries", "wayneenterprises",
+    "acmebank", "northwind", "globexmail", "initechvpn",
+    "soylentcorp", "hoolicloud", "initrode", "rivercity",
 )
 
-_HOMOGLYPHS: dict[str, str] = {"o": "0", "l": "1", "i": "1", "e": "3", "a": "4", "s": "5"}
+# Sustituciones letra -> digito. Es la inversa del mapa `homoglyphs.substitutions`
+# de `config/features.yaml`, que normaliza en sentido digito -> letra.
+_HOMOGLYPHS: dict[str, str] = {
+    "o": "0", "l": "1", "e": "3", "a": "4", "s": "5", "t": "7", "b": "8",
+}
+
+# Secuencias visualmente confundibles, inversa de `homoglyphs.sequences`.
+_HOMOGLYPH_SEQUENCES: dict[str, str] = {"m": "rn", "w": "vv", "d": "cl"}
+
+# Afijos enganosos declarados en `config/features.yaml` (typosquatting).
+_DECEPTIVE_PREFIXES: tuple[str, ...] = (
+    "login", "secure", "verify", "account", "support",
+    "auth", "update", "confirm", "billing", "webmail", "signin",
+)
+_DECEPTIVE_SUFFIXES: tuple[str, ...] = (
+    "login", "secure", "verify", "account", "support",
+    "online", "portal", "sso", "auth", "update", "confirm",
+)
 _CONSONANTS = "bcdfghjklmnpqrstvwxyz"
 _VOWELS = "aeiou"
 _BASE32 = "abcdefghijklmnopqrstuvwxyz234567"
@@ -73,15 +94,17 @@ def normal_domain(rng: random.Random) -> str:
     return f"{second_level}.{synthetic_tld(rng)}"
 
 
-def dga_domain(rng: random.Random, *, min_len: int = 12, max_len: int = 24) -> str:
+def dga_domain(rng: random.Random, *, min_len: int = 18, max_len: int = 30) -> str:
     """Etiqueta de alta entropia: mezcla de consonantes y digitos, sin silabas.
 
-    El sesgo hacia consonantes y digitos baja el ratio de vocales, una de las
-    senales que usan las heuristicas de DGA.
+    El sesgo hacia consonantes y digitos baja el ratio de vocales y sube el de
+    digitos, las senales que usa la heuristica de DGA. El largo minimo queda
+    por encima de `dga.sld_length_min` (14) de `config/features.yaml`, y el
+    maximo por debajo de `dga.longest_label_max` (32).
     """
     length = rng.randint(min_len, max_len)
     alphabet = _CONSONANTS + _VOWELS + "0123456789"
-    weights = [3] * len(_CONSONANTS) + [1] * len(_VOWELS) + [3] * 10
+    weights = [3] * len(_CONSONANTS) + [1] * len(_VOWELS) + [4] * 10
     label = "".join(rng.choices(alphabet, weights=weights, k=length))
     return f"{label}.{synthetic_tld(rng)}"
 
@@ -93,7 +116,10 @@ def typosquat_domain(rng: random.Random, brand: str | None = None) -> TypoDomain
     resultado siempre difiere de la marca original.
     """
     target = brand if brand is not None else rng.choice(FICTIONAL_BRANDS)
-    techniques = ("insert", "delete", "transpose", "substitute", "homoglyph", "prefix", "suffix")
+    techniques = (
+        "insert", "delete", "transpose", "substitute",
+        "homoglyph", "sequence", "prefix", "suffix",
+    )
 
     for technique in rng.sample(techniques, k=len(techniques)):
         typo = _apply_typo(rng, target, technique)
@@ -122,10 +148,15 @@ def _apply_typo(rng: random.Random, target: str, technique: str) -> str:
         if positions:
             i = rng.choice(positions)
             chars[i] = _HOMOGLYPHS[chars[i]]
+    elif technique == "sequence":
+        positions = [i for i, c in enumerate(chars) if c in _HOMOGLYPH_SEQUENCES]
+        if positions:
+            i = rng.choice(positions)
+            chars[i] = _HOMOGLYPH_SEQUENCES[chars[i]]
     elif technique == "prefix":
-        return f"{rng.choice(('login', 'secure', 'account', 'my'))}-{target}"
+        return f"{rng.choice(_DECEPTIVE_PREFIXES)}-{target}"
     elif technique == "suffix":
-        return f"{target}-{rng.choice(('support', 'verify', 'secure', 'help'))}"
+        return f"{target}-{rng.choice(_DECEPTIVE_SUFFIXES)}"
     return "".join(chars)
 
 
@@ -136,10 +167,12 @@ def tunneling_qname(rng: random.Random, base_domain: str | None = None) -> str:
     entropia, etiqueta muy larga y unicidad por consulta.
     """
     base = base_domain if base_domain is not None else f"tunnel.{synthetic_tld(rng)}"
-    payload_len = rng.randint(40, 60)
+    payload_len = rng.randint(60, 100)
     payload = "".join(rng.choices(_BASE32, k=payload_len))
-    # Partir en etiquetas de <=63 caracteres para respetar el limite de DNS.
-    chunks = [payload[i : i + 32] for i in range(0, len(payload), 32)]
+    # Etiquetas de 44 caracteres: por encima de `tunneling.longest_label_min`
+    # (36) de config/features.yaml y por debajo del limite DNS de 63.
+    chunk = 44
+    chunks = [payload[i : i + chunk] for i in range(0, len(payload), chunk)]
     return ".".join([*chunks, base])
 
 
