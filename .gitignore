@@ -20,3 +20,4 @@ outbox/
 *.crt
 .DS_Store
 Thumbs.db
+mateo_docs/
