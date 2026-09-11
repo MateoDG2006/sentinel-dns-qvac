@@ -15,13 +15,16 @@ from app.constants.lab import (
     DEFAULT_DURATION_S,
     DEFAULT_LIMIT,
     DEFAULT_SEED,
+    LOGO_DNS_DESCRIPTION,
     MAX_DURATION_S,
     MAX_LIMIT,
     THREAT_ORDER,
 )
+from app.constants.logo_dns import SCENARIO_NAME as LOGO_DNS_SCENARIO
 from app.domain.enums import EventSource
 from app.domain.schemas import NormalizedDnsEvent, PredictionResult
 from app.services.prediction import PredictionService
+from simulator.logo_dns_queries import LogoDNSQueries
 from simulator.main import PlannedEvent, ground_truth_labels, plan, to_event
 from simulator.profiles import DEFAULT_ZONE, SITES
 from simulator.scenarios import get_scenario, list_scenarios
@@ -124,6 +127,14 @@ class LabFidelityService:
                     default_duration_s=spec.default_duration_s,
                 )
             )
+        items.append(
+            LabCatalogItem(
+                name=LOGO_DNS_SCENARIO,
+                description=LOGO_DNS_DESCRIPTION,
+                default_rate_per_s=0.0,
+                default_duration_s=0.0,
+            )
+        )
         return items
 
     async def evaluate(
@@ -131,6 +142,8 @@ class LabFidelityService:
         request: LabEvaluateRequest,
         service: PredictionService,
     ) -> LabEvaluateResponse:
+        if request.scenario == LOGO_DNS_SCENARIO:
+            return await self._evaluate_logo_dns(request, service)
         spec = get_scenario(request.scenario)
         planned = plan(
             request.scenario,
@@ -156,6 +169,45 @@ class LabFidelityService:
                     "expected_threat": str(raw.get("threat_type") or "none"),
                     "scenario": str(raw.get("scenario") or request.scenario),
                     "technique": technique if isinstance(technique, str) else None,
+                }
+            )
+        results = await service.process_batch(events, EventSource.WEBHOOK)
+        rows = [
+            self._row(event, result, label)
+            for event, result, label in zip(events, results, labels, strict=True)
+        ]
+        return LabEvaluateResponse(
+            scenario=request.scenario,
+            seed=request.seed,
+            duration_s=request.duration_s,
+            planned=len(planned),
+            sampled=len(rows),
+            summary=self._summary(rows),
+            rows=rows,
+        )
+
+    async def _evaluate_logo_dns(
+        self,
+        request: LabEvaluateRequest,
+        service: PredictionService,
+    ) -> LabEvaluateResponse:
+        loader = LogoDNSQueries()
+        planned = loader.load()
+        sampled = loader.take_stratified(planned, request.limit)
+        if not sampled:
+            raise ValueError("no hay fixtures LogoDNSQueries para evaluar")
+        now = datetime.now(UTC)
+        events: list[NormalizedDnsEvent] = []
+        labels: list[dict[str, str | None]] = []
+        for item in sampled:
+            stamped = loader.stamp(item, now=now)
+            events.append(stamped.event)
+            sidecar = loader.labels(stamped)
+            labels.append(
+                {
+                    "expected_threat": sidecar["threat_type"] or "none",
+                    "scenario": sidecar["scenario"] or LOGO_DNS_SCENARIO,
+                    "technique": sidecar["technique"],
                 }
             )
         results = await service.process_batch(events, EventSource.WEBHOOK)

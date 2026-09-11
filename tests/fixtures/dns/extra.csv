@@ -1,0 +1,3 @@
+qname,qtype,rcode,latency_ms,threat_type,technique,scenario
+xj3k9fqm2z.test,A,NXDOMAIN,40,dga,compact_label,logo_dns
+correo.soylentcorp.test,A,NOERROR,15,none,benign_mail,logo_dns

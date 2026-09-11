@@ -40,6 +40,7 @@ def test_catalog_lists_simulator_scenarios() -> None:
     assert "mixed_demo" in names
     assert "dga_burst" in names
     assert "typosquatting" in names
+    assert "logo_dns" in names
 
 
 def test_evaluate_requires_token() -> None:
@@ -105,3 +106,24 @@ def test_catalog_service_matches_simulator() -> None:
     assert "normal" in names
     assert "beaconing" in names
     assert "mixed_demo" in names
+    assert "logo_dns" in names
+
+
+def test_evaluate_logo_dns_returns_sidecar_labels() -> None:
+    with _client() as client:
+        response = client.post(
+            LAB_EVALUATE_PATH,
+            headers={WEBHOOK_TOKEN_HEADER: WEBHOOK_TOKEN},
+            json={"scenario": "logo_dns", "limit": 8, "duration_s": 1, "seed": 42},
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["scenario"] == "logo_dns"
+    assert body["sampled"] == len(body["rows"])
+    assert body["sampled"] >= 1
+    expected = {row["expected_threat"] for row in body["rows"]}
+    assert "dga" in expected
+    assert "none" in expected
+    row = body["rows"][0]
+    assert row["scenario"] == "logo_dns"
+    assert "threat_type" not in row or row["expected_threat"]
