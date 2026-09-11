@@ -1,0 +1,10 @@
+{"qname":"xkqpwzlmntabvdfg.test","qtype":"A","rcode":"NXDOMAIN","latency_ms":34,"threat_type":"dga","technique":"high_entropy","scenario":"logo_dns"}
+{"qname":"portal.northwind.test","qtype":"A","rcode":"NOERROR","latency_ms":18,"threat_type":"none","technique":"benign_dictionary","scenario":"logo_dns"}
+{"qname":"acmebunk.test","qtype":"A","rcode":"NOERROR","latency_ms":22,"threat_type":"typosquatting","technique":"single_edit","scenario":"logo_dns"}
+{"qname":"www.acmebank.test","qtype":"A","rcode":"NOERROR","latency_ms":16,"threat_type":"none","technique":"authorized_brand","scenario":"logo_dns"}
+{"qname":"k7qm2p9x0v4n8w3z5t1y6c2h9b4d8f3s5a7eqrxx.tunnel.test","qtype":"TXT","rcode":"NOERROR","latency_ms":41,"threat_type":"dns_tunneling","technique":"long_txt_label","scenario":"logo_dns"}
+{"qname":"www.globexmail.test","qtype":"A","rcode":"NOERROR","latency_ms":19,"threat_type":"none","technique":"short_a_query","scenario":"logo_dns"}
+{"qname":"status.northwind.test","qtype":"A","rcode":"NOERROR","latency_ms":28,"threat_type":"beaconing","technique":"periodic_low_jitter","scenario":"logo_dns"}
+{"qname":"ayuda.initechvpn.test","qtype":"AAAA","rcode":"NOERROR","latency_ms":24,"threat_type":"none","technique":"sparse_lookup","scenario":"logo_dns"}
+{"qname":"missing-host.nx.example.test","qtype":"A","rcode":"NXDOMAIN","latency_ms":90,"threat_type":"none","technique":"nxdomain_qoe","scenario":"logo_dns"}
+{"qname":"login-acmebank.test","qtype":"A","rcode":"NOERROR","latency_ms":21,"threat_type":"typosquatting","technique":"deceptive_affix","scenario":"logo_dns"}

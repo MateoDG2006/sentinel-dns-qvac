@@ -20,6 +20,13 @@ Kafka/KRaft, inicializador de topics, Sentinel API/consumer/QVAC, productor sint
 
 Los comandos exactos se completarán cuando `compose.yaml`, scripts y README tengan implementación. No documentar comandos que todavía no funcionen.
 
+## LogoDNSQueries
+
+- Dataset crudo (opcional): `data/LogoDNSQueries/*.csv|json|jsonl` — gitignorado; no versionar dumps.
+- Fixtures curadas: `tests/fixtures/dns/` (allowlist sintético `.test`).
+- Cargador: `uv run python -m simulator.logo_dns_queries`.
+- Lab: escenario `logo_dns` en `POST /api/v1/lab/evaluate`. El ground truth va en sidecar, no en `NormalizedDnsEvent`.
+
 ## Salud
 
 - `/health/live`: proceso/event loop.

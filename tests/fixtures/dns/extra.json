@@ -1,0 +1,13 @@
+{
+  "records": [
+    {
+      "qname": "blog.hoolicloud.test",
+      "qtype": "A",
+      "rcode": "NOERROR",
+      "latency_ms": 17,
+      "threat_type": "none",
+      "technique": "json_record",
+      "scenario": "logo_dns"
+    }
+  ]
+}
