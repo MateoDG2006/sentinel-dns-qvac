@@ -41,6 +41,7 @@ def planned(
     sites: tuple[str, ...] = ("pop-bog",),
     zones: tuple[str, ...] = ("zona-centro",),
     duration_s: float = 60.0,
+    run_id: str | None = None,
 ) -> list[PlannedEvent]:
     return plan(
         scenario,
@@ -49,6 +50,7 @@ def planned(
         rate_per_s=20.0,
         duration_s=duration_s,
         seed=seed,
+        run_id=run_id,
     )
 
 
@@ -125,12 +127,35 @@ def test_el_qname_llega_normalizado_sin_cambios() -> None:
 # --- Planificación ----------------------------------------------------------
 
 
-def test_la_misma_seed_produce_los_mismos_eventos_e_ids() -> None:
-    assert planned(seed=7) == planned(seed=7)
+def test_la_misma_seed_y_el_mismo_run_id_repiten_la_corrida_exacta() -> None:
+    assert planned(seed=7, run_id="ensayo") == planned(seed=7, run_id="ensayo")
 
 
 def test_seeds_distintas_producen_eventos_distintos() -> None:
     assert planned(seed=1) != planned(seed=2)
+
+
+def test_sin_run_id_cada_corrida_repite_el_contenido_con_ids_nuevos() -> None:
+    """Repetir la demo (el ensayo antes del video) no debe producir duplicados:
+    el PredictionService descarta cualquier event_id que ya vio (spec sección 14)."""
+    primera = planned(seed=42)
+    segunda = planned(seed=42)
+    assert [p.query for p in primera] == [p.query for p in segunda]
+    assert {p.event_id for p in primera}.isdisjoint(p.event_id for p in segunda)
+
+
+def test_dos_simuladores_con_la_misma_seed_no_comparten_ids() -> None:
+    """Regresión de la prueba E2E: centro y sur en paralelo, ambos con seed 42,
+    repetían los mismos event_id y el detector descartaba casi todo sur."""
+    centro = planned("normal", zones=("zona-centro",), duration_s=30.0)
+    sur = planned("zone_latency", zones=("zona-sur",), duration_s=30.0)
+    assert {p.event_id for p in centro}.isdisjoint(p.event_id for p in sur)
+
+
+def test_cada_evento_lleva_el_run_id_de_su_corrida() -> None:
+    eventos = planned(run_id="corrida-1")
+    assert {p.run_id for p in eventos} == {"corrida-1"}
+    assert all(ground_truth_labels(p)["run_id"] == "corrida-1" for p in eventos)
 
 
 def test_los_event_id_son_unicos() -> None:
@@ -255,3 +280,25 @@ def test_la_cli_acepta_varias_zonas_separadas_por_comas(
 def test_la_cli_rechaza_un_escenario_inexistente() -> None:
     with pytest.raises(SystemExit):
         main(["--scenario", "no-existe", "--dry-run"])
+
+
+def test_la_cli_genera_un_run_id_nuevo_en_cada_ejecucion(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def ids_de_una_corrida() -> set[str]:
+        main(["--scenario", "normal", "--duration", "2", "--dry-run"])
+        lineas = capsys.readouterr().out.splitlines()
+        return {json.loads(linea)["event"]["event_id"] for linea in lineas}
+
+    assert ids_de_una_corrida().isdisjoint(ids_de_una_corrida())
+
+
+def test_la_cli_con_run_id_explicito_es_reproducible(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def ids_de_una_corrida() -> list[str]:
+        main(["--scenario", "normal", "--duration", "2", "--run-id", "video", "--dry-run"])
+        lineas = capsys.readouterr().out.splitlines()
+        return [json.loads(linea)["event"]["event_id"] for linea in lineas]
+
+    assert ids_de_una_corrida() == ids_de_una_corrida()
