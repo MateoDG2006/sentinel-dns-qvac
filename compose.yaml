@@ -205,6 +205,10 @@ services:
     networks: [sentinel-net]
     ports:
       - "127.0.0.1:55000:55000"
+    environment:
+      # Local demo API account. Values come from gitignored .env.
+      API_USERNAME: ${SENTINEL_WAZUH__USERNAME:-wazuh}
+      API_PASSWORD: ${SENTINEL_WAZUH__PASSWORD:-}
     volumes:
       - wazuh-data:/var/ossec/data
       - ./deploy/wazuh/rules/sentinel_dns_rules.xml:/var/ossec/etc/rules/sentinel_dns_rules.xml:ro

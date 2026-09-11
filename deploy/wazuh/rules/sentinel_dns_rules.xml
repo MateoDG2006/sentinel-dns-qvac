@@ -10,10 +10,14 @@
   as opposed to a traditional log/decoder pipeline. Verify with
   wazuh-logtest (see below) before treating this as final:
 
-  1. A JSON event decodes with <decoded_as>json</decoded_as>, and nested
-     objects become dot-path dynamic fields (threat.type, dns.qname, etc.)
-     -- this is the confirmed general pattern for Wazuh's built-in JSON
-     decoder, not something specific to this endpoint that I've verified.
+  1. POST /events JSON still decodes with the built-in json decoder
+     (phase 2 `name: json`, nested objects as dot-path fields). Stock
+     Wazuh 4.14 rule 86600 is a Suricata parent that matches ANY json
+     log with `timestamp` and `event_type`, which our contract has, so
+     it wins before a sibling `<decoded_as>json</decoded_as>` rule.
+     100199 therefore chains with <if_sid>86600</if_sid> plus
+     integration=sentinel-dns. Do not switch to decoded_as=sentinel_dns
+     without adding a custom decoder.
 
   2. Operational alerts (100220, 100221) reuse WazuhThreatEvent's required
      `threat` object with threat.type="none", carrying the real signal as
@@ -25,11 +29,11 @@
   Targets a pre-5.0 Wazuh manager. See the flag raised alongside this file
   about wazuh/wazuh#34848 (proposed removal of POST /events in 5.0).
 -->
-<!-- Sentinel-DNS custom rules (WBS B3). POST /events JSON uses the built-in json decoder. -->
+<!-- Sentinel-DNS custom rules (WBS B3). JSON decoder + Suricata parent 86600. -->
 <group name="sentinel_dns,">
 
   <rule id="100199" level="0">
-    <decoded_as>json</decoded_as>
+    <if_sid>86600</if_sid>
     <field name="integration">^sentinel-dns$</field>
     <description>Sentinel-DNS event</description>
   </rule>

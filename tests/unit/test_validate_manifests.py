@@ -215,5 +215,5 @@ def test_local_overlay_renders_frozen_services_and_passes_policy() -> None:
     assert "privileged: true" not in rendered
     assert "stringData:" not in rendered
     rules = (_REPO / "deploy/wazuh/rules/sentinel_dns_rules.xml").read_text(encoding="utf-8")
-    assert "<decoded_as>json</decoded_as>" in rules
+    assert "<if_sid>86600</if_sid>" in rules
     assert "<decoded_as>sentinel_dns</decoded_as>" not in rules

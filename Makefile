@@ -13,7 +13,7 @@ CLICKHOUSE_HOST := localhost
 API_HOST := 127.0.0.1
 API_PORT := 8000
 
-.PHONY: help env sync kafka up full down logs ps wait-kafka topics \
+.PHONY: help env sync kafka up full wazuh down logs ps wait-kafka topics \
 	bootstrap qvac-smoke api dev check test fmt smoke validate-k8s
 
 help:
@@ -21,6 +21,7 @@ help:
 	$(info   make sync           uv sync + npm install (@qvac/sdk local))
 	$(info   make up             Perfil core: Kafka, ClickHouse, Grafana, Prometheus, API)
 	$(info   make full           Perfil full: core + Wazuh manager + simulador)
+	$(info   make wazuh          Levanta wazuh-manager, exporta el cert TLS y hace ingest de prueba)
 	$(info   make wait-kafka     Espera healthcheck de sentinel-kafka)
 	$(info   make topics         Lista topics congelados)
 	$(info   make down           Para el stack Compose)
@@ -60,6 +61,10 @@ up: env
 full: env
 	$(COMPOSE) --profile full up -d --build
 	@$(MAKE) wait-kafka
+
+wazuh: env
+	$(COMPOSE) --profile security up -d
+	$(UV) run python scripts/bootstrap_wazuh.py
 
 kafka: up
 
@@ -106,12 +111,13 @@ validate-k8s:
 ifeq ($(OS),Windows_NT)
 api: env
 	@echo API en http://$(API_HOST):$(API_PORT)/docs Kafka=$(KAFKA_HOST_BOOTSTRAP) ClickHouse=$(CLICKHOUSE_HOST)
-	powershell -NoProfile -Command "$$env:SENTINEL_KAFKA__BOOTSTRAP_SERVERS='$(KAFKA_HOST_BOOTSTRAP)'; $$env:SENTINEL_CLICKHOUSE__HOST='$(CLICKHOUSE_HOST)'; uv run uvicorn app.main:app --host $(API_HOST) --port $(API_PORT)"
+	powershell -NoProfile -Command "$$env:SENTINEL_KAFKA__BOOTSTRAP_SERVERS='$(KAFKA_HOST_BOOTSTRAP)'; $$env:SENTINEL_CLICKHOUSE__HOST='$(CLICKHOUSE_HOST)'; $$env:SENTINEL_WAZUH__BASE_URL='https://localhost:55000'; uv run uvicorn app.main:app --host $(API_HOST) --port $(API_PORT)"
 else
 api: env
 	@echo API en http://$(API_HOST):$(API_PORT)/docs Kafka=$(KAFKA_HOST_BOOTSTRAP) ClickHouse=$(CLICKHOUSE_HOST)
 	SENTINEL_KAFKA__BOOTSTRAP_SERVERS=$(KAFKA_HOST_BOOTSTRAP) \
 		SENTINEL_CLICKHOUSE__HOST=$(CLICKHOUSE_HOST) \
+		SENTINEL_WAZUH__BASE_URL=https://localhost:55000 \
 		$(UV) run uvicorn app.main:app --host $(API_HOST) --port $(API_PORT)
 endif
 

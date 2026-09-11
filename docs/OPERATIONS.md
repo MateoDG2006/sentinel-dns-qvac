@@ -12,8 +12,9 @@
 2. `make sync` (`uv sync` + `npm install` para `@qvac/sdk` local).
 3. `make bootstrap` una vez (GGUF en `data/qvac/`); después `make qvac-smoke`.
 4. `make up` (perfil `core`) o `make full` (incluye Wazuh manager y el simulador).
-5. `make api` — fuerza `SENTINEL_KAFKA__BOOTSTRAP_SERVERS=localhost:29092` y `SENTINEL_CLICKHOUSE__HOST=localhost`.
-6. Lab: `http://127.0.0.1:8000/lab`. Simulador: `uv run python -m simulator.main --scenario mixed_demo --seed 42`.
+5. `make wazuh` — perfil `security`: manager en `:55000`, cert en `data/wazuh/root-ca.pem` y smoke `POST /events`.
+6. `make api` — fuerza Kafka `localhost:29092`, ClickHouse `localhost` y Wazuh `https://localhost:55000`.
+7. Lab: `http://127.0.0.1:8000/lab`. Simulador: `uv run python -m simulator.main --scenario mixed_demo --seed 42`.
 
 El proceso comparte un solo `PredictionService` para Kafka, webhook y lab:
 

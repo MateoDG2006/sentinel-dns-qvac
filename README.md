@@ -129,9 +129,9 @@ uv run python scripts/smoke_test.py
 - API: http://127.0.0.1:8000/docs y `/lab`
 - Grafana (anónimo Viewer): http://127.0.0.1:3000
 - Prometheus: http://127.0.0.1:9090
-- Wazuh API: https://127.0.0.1:55000 (credenciales en `.env`, no en git)
+- Wazuh API: https://localhost:55000 (credenciales en `.env`, no en git). `make wazuh` exporta el cert a `data/wazuh/root-ca.pem`.
 
-El webhook usa `X-Sentinel-Token`. Wazuh recibe `POST /events` con JWT. Las reglas viven en `deploy/wazuh/rules/sentinel_dns_rules.xml` y se decodifican como JSON (`decoded_as=json`).
+El webhook usa `X-Sentinel-Token`. Wazuh recibe `POST /events` con JWT. Las reglas viven en `deploy/wazuh/rules/sentinel_dns_rules.xml` (JSON decoder; 100199 cuelga de la regla stock 86600 porque esa captura todo JSON con `timestamp`+`event_type`).
 
 Kubernetes (sin clúster): `make validate-k8s` o `kubectl kustomize deploy/kubernetes/overlays/local`.
 
