@@ -15,6 +15,7 @@ from app.constants.clickhouse import DATABASE as CLICKHOUSE_DATABASE
 from app.constants.clickhouse import QOE_TABLE as CLICKHOUSE_QOE_TABLE
 from app.constants.kafka import TOPIC_DLQ, TOPIC_GROUNDTRUTH, TOPIC_NORMALIZED
 from app.constants.network import LOCAL_DNS_SUFFIXES, LOCAL_SERVICE_HOSTS
+from app.constants.qvac import SDK_PACKAGE_DIR
 from app.domain.enums import RuntimeProfile
 from app.utils.secrets import SecretFile
 
@@ -159,6 +160,8 @@ class Settings(BaseSettings):
     qvac_enabled: bool = True
     qvac_cache_dir: Path = Path("data/qvac")
     qvac_worker_path: Path | None = None
+    qvac_bare_path: Path | None = None
+    qvac_sdk_dir: Path = SDK_PACKAGE_DIR
     qvac_timeout_seconds: float = Field(default=1.5, gt=0.0)
     qvac_concurrency: int = Field(default=1, ge=1)
     kafka: KafkaSettings = Field(default_factory=KafkaSettings)
@@ -190,6 +193,14 @@ class Settings(BaseSettings):
             worker_path = os.environ.get("QVAC_WORKER_PATH")
             if worker_path:
                 data["qvac_worker_path"] = worker_path
+        if "qvac_bare_path" not in data:
+            bare_path = os.environ.get("QVAC_BARE_PATH")
+            if bare_path:
+                data["qvac_bare_path"] = bare_path
+        if "qvac_sdk_dir" not in data:
+            sdk_dir = os.environ.get("QVAC_SDK_DIR")
+            if sdk_dir:
+                data["qvac_sdk_dir"] = sdk_dir
         return data
 
     @model_validator(mode="after")
@@ -226,3 +237,5 @@ class Settings(BaseSettings):
             raise ValueError("no_egress requires a local ClickHouse host")
         if str(self.qvac_cache_dir).startswith(("http://", "https://")):
             raise ValueError("QVAC_CACHE_DIR must be a local path")
+        if str(self.qvac_sdk_dir).startswith(("http://", "https://")):
+            raise ValueError("QVAC_SDK_DIR must be a local path")

@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sentinel-DNS · Lab QVAC</title>
+  <style>
+    :root {
+      --bg: #0e1210;
+      --panel: #171c19;
+      --line: #2a332e;
+      --text: #e8eee9;
+      --muted: #9aa89e;
+      --accent: #3dd68c;
+      --warn: #e6b84d;
+      --bad: #ef6b6b;
+      --ok: #3dd68c;
+      --chip: #243029;
+      --focus: #7ee0b0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.45 "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    a { color: var(--accent); }
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      align-items: center;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    header h1 { margin: 0; font-size: 1.15rem; letter-spacing: .02em; }
+    header p { margin: .15rem 0 0; color: var(--muted); font-size: .9rem; }
+    .nav { display: flex; gap: .75rem; align-items: center; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      padding: .2rem .6rem;
+      border-radius: 999px;
+      background: var(--chip);
+      font-size: .8rem;
+      color: var(--muted);
+    }
+    .pill[data-state="up"] { color: var(--ok); }
+    .pill[data-state="degraded"] { color: var(--warn); }
+    .pill[data-state="down"] { color: var(--bad); }
+    main { padding: 1.25rem; display: grid; gap: 1rem; }
+    form, .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: .75rem;
+    }
+    label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: .25rem; }
+    input, select, button, textarea {
+      width: 100%;
+      padding: .55rem .65rem;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #101512;
+      color: var(--text);
+      font: inherit;
+    }
+    input:focus, select:focus, button:focus {
+      outline: 2px solid var(--focus);
+      outline-offset: 1px;
+    }
+    button {
+      cursor: pointer;
+      background: var(--accent);
+      color: #062315;
+      font-weight: 650;
+      border: 0;
+    }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    button.secondary { background: var(--chip); color: var(--text); }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; }
+    .stat { padding: .75rem; border: 1px solid var(--line); border-radius: 10px; background: #121714; }
+    .stat b { display: block; font-size: 1.4rem; }
+    .stat span { color: var(--muted); font-size: .8rem; }
+    .filters { display: flex; flex-wrap: wrap; gap: .4rem; margin: .5rem 0 1rem; }
+    .filters button { width: auto; padding: .3rem .7rem; font-weight: 500; }
+    .filters button[aria-pressed="true"] { background: var(--accent); color: #062315; }
+    table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    th, td { text-align: left; padding: .45rem .4rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+    tr.miss { background: #2a1616; }
+    .tag {
+      display: inline-block;
+      padding: .1rem .4rem;
+      border-radius: 6px;
+      background: var(--chip);
+      font-size: .75rem;
+    }
+    .muted { color: var(--muted); }
+    .error { color: var(--bad); }
+    .help { color: var(--muted); font-size: .9rem; }
+    code { font-family: ui-monospace, Consolas, monospace; font-size: .82rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Lab QVAC</h1>
+      <p>Mismo <code>PredictionService</code> que Kafka y el webhook. Lotes sintéticos con seed fija.</p>
+    </div>
+    <div class="nav">
+      <span class="pill" id="qvac-pill" data-state="degraded">qvac …</span>
+      <span class="pill" id="kafka-pill" data-state="degraded">kafka …</span>
+      <a href="/docs">Swagger</a>
+      <a href="/health/ready">Health</a>
+    </div>
+  </header>
+  <main>
+    <form id="run-form">
+      <div class="grid">
+        <div>
+          <label for="token">Token webhook (<code>X-Sentinel-Token</code>)</label>
+          <input id="token" name="token" type="password" autocomplete="off" required>
+        </div>
+        <div>
+          <label for="scenario">Escenario</label>
+          <select id="scenario" name="scenario" required></select>
+        </div>
+        <div>
+          <label for="seed">Seed</label>
+          <input id="seed" name="seed" type="number" min="0" value="42">
+        </div>
+        <div>
+          <label for="limit">Eventos (máx. 100)</label>
+          <input id="limit" name="limit" type="number" min="1" max="100" value="12">
+        </div>
+        <div>
+          <label for="duration">Ventana sintética (s)</label>
+          <input id="duration" name="duration" type="number" min="1" max="30" step="1" value="8">
+        </div>
+        <div style="display:flex;align-items:end;">
+          <button type="submit" id="run">Evaluar pipeline</button>
+        </div>
+      </div>
+      <p class="help" id="scenario-help">Carga el catálogo del simulador…</p>
+    </form>
+    <section class="card" id="results" hidden>
+      <div class="stats" id="stats"></div>
+      <div class="filters" role="group" aria-label="Filtro de filas">
+        <button type="button" class="secondary" data-filter="all" aria-pressed="true">Todos</button>
+        <button type="button" class="secondary" data-filter="miss" aria-pressed="false">Desaciertos</button>
+        <button type="button" class="secondary" data-filter="qvac" aria-pressed="false">QVAC usado</button>
+      </div>
+      <div style="overflow:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Qname</th>
+              <th>Esperado</th>
+              <th>Predicho</th>
+              <th>Modo</th>
+              <th>Heurística</th>
+              <th>QVAC</th>
+              <th>Razones</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+    <p class="error" id="error" hidden></p>
+  </main>
+  <script>
+    const tokenInput = document.getElementById("token");
+    const scenarioSelect = document.getElementById("scenario");
+    const help = document.getElementById("scenario-help");
+    const form = document.getElementById("run-form");
+    const results = document.getElementById("results");
+    const stats = document.getElementById("stats");
+    const rows = document.getElementById("rows");
+    const errorBox = document.getElementById("error");
+    const runBtn = document.getElementById("run");
+    let currentRows = [];
+    let filter = "all";
+
+    tokenInput.value = sessionStorage.getItem("sentinel_webhook_token") || "";
+
+    async function loadHealth() {
+      try {
+        const res = await fetch("/health/ready");
+        const body = await res.json();
+        const byName = Object.fromEntries((body.dependencies || []).map((d) => [d.name, d]));
+        setPill("qvac-pill", "qvac", byName.qvac);
+        setPill("kafka-pill", "kafka", byName.kafka);
+      } catch {
+        setPill("qvac-pill", "qvac", null);
+      }
+    }
+
+    function setPill(id, label, dep) {
+      const el = document.getElementById(id);
+      const status = dep && dep.status ? dep.status : "down";
+      el.dataset.state = status;
+      el.textContent = dep ? label + " " + status : label + " ?";
+    }
+
+    async function loadCatalog() {
+      const res = await fetch("/api/v1/lab/catalog");
+      const items = await res.json();
+      scenarioSelect.innerHTML = "";
+      for (const item of items) {
+        const opt = document.createElement("option");
+        opt.value = item.name;
+        opt.textContent = item.name;
+        opt.dataset.description = item.description;
+        scenarioSelect.appendChild(opt);
+      }
+      const mixed = [...scenarioSelect.options].find((o) => o.value === "mixed_demo");
+      if (mixed) mixed.selected = true;
+      updateHelp();
+    }
+
+    function updateHelp() {
+      const opt = scenarioSelect.selectedOptions[0];
+      help.textContent = opt && opt.dataset.description
+        ? opt.dataset.description + " Ground truth no viaja en el evento; el lab lo compara al lado."
+        : "";
+    }
+    scenarioSelect.addEventListener("change", updateHelp);
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      errorBox.hidden = true;
+      sessionStorage.setItem("sentinel_webhook_token", tokenInput.value);
+      runBtn.disabled = true;
+      runBtn.textContent = "Evaluando…";
+      try {
+        const res = await fetch("/api/v1/lab/evaluate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Sentinel-Token": tokenInput.value,
+          },
+          body: JSON.stringify({
+            scenario: scenarioSelect.value,
+            seed: Number(document.getElementById("seed").value),
+            limit: Number(document.getElementById("limit").value),
+            duration_s: Number(document.getElementById("duration").value),
+          }),
+        });
+        const body = await res.json();
+        if (!res.ok) {
+          throw new Error(body.detail ? JSON.stringify(body.detail) : res.statusText);
+        }
+        render(body);
+      } catch (err) {
+        errorBox.hidden = false;
+        errorBox.textContent = err.message || String(err);
+      } finally {
+        runBtn.disabled = false;
+        runBtn.textContent = "Evaluar pipeline";
+      }
+    });
+
+    document.querySelectorAll(".filters button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        filter = btn.dataset.filter;
+        document.querySelectorAll(".filters button").forEach((other) => {
+          other.setAttribute("aria-pressed", String(other === btn));
+        });
+        paintRows();
+      });
+    });
+
+    function render(body) {
+      results.hidden = false;
+      const s = body.summary;
+      stats.innerHTML = [
+        stat("Accuracy", (s.accuracy * 100).toFixed(0) + "%", s.matches + "/" + s.total),
+        stat("QVAC usado", String(s.qvac_used), "enrichment en banda 0.45–0.90"),
+        stat("Hybrid", String(s.hybrid), "fallback " + s.heuristic_fallback),
+        stat("Degradado", String(s.degraded), "timeout o worker caído"),
+        stat("Planificados", String(body.planned), "muestreados " + body.sampled),
+      ].join("");
+      currentRows = body.rows;
+      paintRows();
+    }
+
+    function stat(title, value, hint) {
+      return `<div class="stat"><span>${title}</span><b>${value}</b><span>${hint}</span></div>`;
+    }
+
+    function paintRows() {
+      const visible = currentRows.filter((row) => {
+        if (filter === "miss") return !row.match;
+        if (filter === "qvac") return row.qvac_used;
+        return true;
+      });
+      rows.innerHTML = visible.map((row) => `
+        <tr class="${row.match ? "" : "miss"}">
+          <td><code>${escapeHtml(row.qname)}</code><div class="muted">${escapeHtml(row.qtype)} · ${escapeHtml(row.rcode)}</div></td>
+          <td><span class="tag">${escapeHtml(row.expected_threat)}</span></td>
+          <td><span class="tag">${escapeHtml(row.predicted_threat)}</span></td>
+          <td>${escapeHtml(row.mode)}${row.degraded ? " · degradado" : ""}</td>
+          <td>${row.heuristic_score.toFixed(2)}</td>
+          <td>${row.qvac_score == null ? "—" : row.qvac_score.toFixed(2)}</td>
+          <td class="muted">${escapeHtml((row.reasons || []).join(", "))}</td>
+        </tr>
+      `).join("") || `<tr><td colspan="7" class="muted">Sin filas para este filtro.</td></tr>`;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    loadHealth();
+    loadCatalog();
+  </script>
+</body>
+</html>

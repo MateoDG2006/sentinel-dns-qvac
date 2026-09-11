@@ -11,6 +11,7 @@ resolver_error_rcodes:
   - REFUSED
   - FORMERR
   - NOTIMP
+  - TIMEOUT
 homoglyphs:
   substitutions:
     "0": "o"

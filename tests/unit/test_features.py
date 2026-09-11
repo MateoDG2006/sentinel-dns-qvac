@@ -79,10 +79,16 @@ def test_extractor_maps_lexical_and_rcode_features() -> None:
 def test_extractor_marks_resolver_errors_and_timeouts() -> None:
     extractor = FeatureExtractor()
     servfail = extractor.extract(_event(rcode="SERVFAIL"), _history())
-    timeout = extractor.extract(_event(timed_out=True), _history())
+    timeout_flag = extractor.extract(_event(timed_out=True), _history())
+    timeout_rcode = extractor.extract(
+        _event(rcode="TIMEOUT", timed_out=True, latency_ms=None),
+        _history(),
+    )
     assert servfail.resolver_error is True
     assert servfail.nxdomain is False
-    assert timeout.resolver_error is True
+    assert timeout_flag.resolver_error is True
+    assert timeout_rcode.resolver_error is True
+    assert timeout_rcode.nxdomain is False
 
 
 def test_extractor_copies_temporal_context_and_uniqueness() -> None:
