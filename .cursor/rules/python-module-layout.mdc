@@ -1,0 +1,29 @@
+---
+description: Constants go in app/constants; loose functions become a related class or live in app/utils
+globs: "**/*.py"
+alwaysApply: true
+---
+
+# Layout de constantes y funciones
+
+Aplica a todo el código de producción (`app/`, `simulator/`, `scripts/`). No vale un `def` o constante suelta en un módulo de contratos, config o servicios.
+
+- Constantes (`TOPIC_*`, límites, allowlists, nombres de tabla): `app/constants/<tipo>.py`. El archivo nombra el tipo (`kafka.py`, `dns.py`, `clickhouse.py`, `network.py`, `api.py`). Cambiar un contrato congelado requiere ADR.
+- Si la función es comportamiento del tipo del archivo, encapsúlala en una clase de ese módulo (`Settings.get`, `LocalEndpointPolicy`).
+- Si no pertenece a esa clase, colócala en `app/utils/<tipo>.py` como clase (`Qname`, `UtcDateTime`, `SecretFile`).
+- Prohibido reexportar funciones sueltas (`normalize_qname = Qname.normalize`) para “no romper imports”.
+- Tests y fixtures de pytest pueden seguir siendo funciones.
+
+```python
+# ❌ BAD — constante y helper sueltos en schemas.py
+QNAME_MAX_LENGTH = 253
+def normalize_qname(raw: str) -> str: ...
+
+# ✅ GOOD
+# app/constants/dns.py
+QNAME_MAX_LENGTH: Final[int] = 253
+# app/utils/dns.py
+class Qname:
+    @staticmethod
+    def normalize(raw: str) -> str: ...
+```
