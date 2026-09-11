@@ -1,0 +1,8 @@
+{
+  "name": "sentinel_ingest_policy",
+  "policy": {
+    "actions": ["event:ingest"],
+    "resources": ["*:*:*"],
+    "effect": "allow"
+  }
+}
