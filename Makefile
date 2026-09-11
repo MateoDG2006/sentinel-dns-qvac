@@ -35,6 +35,7 @@ help:
 	$(info   make check        ruff + mypy + pytest unit)
 	$(info   make test         pytest tests/unit)
 	$(info)
+	$(info Lab QVAC: http://$(API_HOST):$(API_PORT)/lab)
 	$(info Docs: http://$(API_HOST):$(API_PORT)/docs)
 	$(info Kafka host: $(KAFKA_HOST_BOOTSTRAP))
 	@:
@@ -115,7 +116,7 @@ dev: env sync up
 	$(info   1. Rellena SENTINEL_WEBHOOK_TOKEN en .env)
 	$(info   2. make bootstrap   (si data/qvac ya tiene el GGUF: make qvac-smoke))
 	$(info   3. make api)
-	$(info   4. http://$(API_HOST):$(API_PORT)/docs)
+	$(info   4. http://$(API_HOST):$(API_PORT)/lab)
 	@:
 
 check:

@@ -37,6 +37,9 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["app", "simulator"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"app/api/static/lab.html" = "app/api/static/lab.html"
+
 [tool.uv]
 default-groups = ["dev"]
 

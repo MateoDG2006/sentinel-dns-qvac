@@ -5,9 +5,10 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 
 from app.api.routes.health import HealthApi
+from app.api.routes.lab import LabApi
 from app.api.routes.metrics import MetricsApi
 from app.api.routes.predictions import PredictionsApi
-from app.constants.api import DOCS_PATH, OPENAPI_PATH, REDOC_PATH
+from app.constants.api import DOCS_PATH, LAB_PATH, OPENAPI_PATH, REDOC_PATH
 from app.core.config import Settings
 from app.core.lifecycle import AppLifecycle
 from app.core.logging import JsonLogging
@@ -34,12 +35,12 @@ class SentinelApp:
             title="Sentinel-DNS",
             version="0.1.0",
             description=(
-                "Webhook local y health para probar el mismo `PredictionService` "
-                "que consume Kafka.\n\n"
-                "1. En `POST /api/v1/predictions` usa el header `X-Sentinel-Token`.\n"
-                "2. Elige un ejemplo (benigno o DGA) y cambia `event_id` si reenvías.\n"
+                "Webhook local, lab QVAC y health. El detector es el mismo "
+                "`PredictionService` que consume Kafka.\n\n"
+                f"1. Lab interactivo: `{LAB_PATH}` (lotes sintéticos + fidelidad).\n"
+                "2. En `POST /api/v1/predictions` usa el header `X-Sentinel-Token`.\n"
                 "3. En perfil hackathon `synthetic` debe ser `true`.\n"
-                "4. Kafka no se dispara desde esta UI; es el consumer del stream."
+                "4. Kafka se alimenta con `python -m simulator.main`."
             ),
             lifespan=SentinelApp.lifespan,
             docs_url=DOCS_PATH,
@@ -48,6 +49,7 @@ class SentinelApp:
             swagger_ui_parameters={"persistAuthorization": True, "tryItOutEnabled": True},
             openapi_tags=[
                 {"name": "health", "description": "Liveness, readiness y estado degradado."},
+                {"name": "lab", "description": "Lotes sintéticos y fidelidad heurística/QVAC."},
                 {"name": "predictions", "description": "Webhook 1..100 eventos sintéticos."},
                 {"name": "metrics", "description": "Prometheus sin labels de identidad."},
             ],
@@ -63,6 +65,7 @@ class SentinelApp:
             include_in_schema=False,
         )
         application.include_router(HealthApi.router)
+        application.include_router(LabApi.router)
         application.include_router(MetricsApi.router)
         application.include_router(PredictionsApi.router)
         return application

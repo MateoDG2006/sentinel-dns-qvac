@@ -67,7 +67,7 @@ class QvacEnrichmentService:
         except (QvacTimeoutError, QvacUnavailableError, QvacInvalidResponseError) as exc:
             self._log.warning(
                 "qvac_enrichment_degraded",
-                extra={"event_id": str(candidate.event_id), "code": exc.code},
+                extra={"error_code": exc.code},
             )
             return QvacEnrichmentResult(heuristic=heuristic, qvac=None, degraded=True)
         return QvacEnrichmentResult(heuristic=heuristic, qvac=verdict, degraded=False)
