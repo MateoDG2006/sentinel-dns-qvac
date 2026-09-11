@@ -11,7 +11,7 @@ doesn't support.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.domain.ports import OutboxPort, WazuhEventPort
 from app.infrastructure.wazuh.client import compute_retry_delay
@@ -40,7 +40,7 @@ class WazuhOutboxDispatcher:
         if result.retryable:
             attempt = max((record.attempts for record in batch), default=0)
             delay = compute_retry_delay(attempt, result.retry_after_seconds)
-            retry_at = datetime.now(timezone.utc) + timedelta(seconds=delay)
+            retry_at = datetime.now(UTC) + timedelta(seconds=delay)
             await self._outbox.reschedule(
                 ids, retry_at, reason=result.reason or "retryable_delivery_failure"
             )

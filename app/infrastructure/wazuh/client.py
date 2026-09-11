@@ -52,7 +52,9 @@ class _RateLimiter:
             self._calls.append(self._clock())
 
 
-def _backoff_with_jitter(attempt: int, base_seconds: float = 1.0, cap_seconds: float = 30.0) -> float:
+def _backoff_with_jitter(
+    attempt: int, base_seconds: float = 1.0, cap_seconds: float = 30.0
+) -> float:
     """Full-jitter exponential backoff: random(0, min(cap, base * 2^attempt))."""
     upper = min(cap_seconds, base_seconds * (2**attempt))
     return random.uniform(0.0, upper)
@@ -92,7 +94,9 @@ class WazuhClient:
             token = await self._auth.get_token()
             response = await self._post_events(token, events)
         except httpx.TimeoutException:
-            return DeliveryResult(accepted=0, rejected=len(events), retryable=True, reason="timeout")
+            return DeliveryResult(
+                accepted=0, rejected=len(events), retryable=True, reason="timeout"
+            )
         except httpx.TransportError:
             return DeliveryResult(
                 accepted=0, rejected=len(events), retryable=True, reason="connection_error"
@@ -156,7 +160,12 @@ class WazuhClient:
             )
         if 200 <= response.status_code < 300:
             accepted, rejected = self._parse_success_counts(response, batch_size)
-            return DeliveryResult(accepted=accepted, rejected=rejected, retryable=False, status_code=response.status_code)
+            return DeliveryResult(
+                accepted=accepted,
+                rejected=rejected,
+                retryable=False,
+                status_code=response.status_code,
+    )
         # Any other 4xx: a permanent request/payload problem (Wazuh's own
         # docs show this shape for a malformed request: {"error": "3013",
         # "message": {"title": ..., "detail": ...}}). The bulk endpoint

@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 import pytest
 
 from app.core.config import WazuhSettings
-from app.infrastructure.wazuh.client import WazuhClient, _RateLimiter, _backoff_with_jitter
+from app.infrastructure.wazuh.client import WazuhClient, _backoff_with_jitter, _RateLimiter
 
 
 def _fake_jwt(exp_seconds_from_now: float = 900.0) -> str:
     header = base64.urlsafe_b64encode(b'{"alg":"none"}').rstrip(b"=").decode()
-    exp = int(datetime.now(timezone.utc).timestamp() + exp_seconds_from_now)
+    exp = int(datetime.now(UTC).timestamp() + exp_seconds_from_now)
     payload = base64.urlsafe_b64encode(json.dumps({"exp": exp}).encode()).rstrip(b"=").decode()
     return f"{header}.{payload}.sig"
 
@@ -43,6 +43,7 @@ async def test_successful_send_all_accepted():
         assert request.url.path == "/events"
         assert request.headers["authorization"].startswith("Bearer ")
         body = json.loads(request.content)
+        assert body == {"events": ["{}", "{}"]}
         return httpx.Response(200, json={"error": 0, "data": {}})
 
     client = _client_with_handler(_settings(), handler)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -16,7 +16,7 @@ def _make_record() -> OutboxRecord:
         id=uuid4(),
         event_id=uuid4(),
         prediction_id=None,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         payload='{"threat_type": "dga"}',
         status=OutboxStatus.PENDING,
         attempts=0,
