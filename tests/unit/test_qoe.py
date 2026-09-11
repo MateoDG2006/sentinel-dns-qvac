@@ -258,8 +258,7 @@ def test_las_tres_tasas_de_fallo_son_excluyentes(thresholds) -> None:
 
 def test_los_timeouts_no_contaminan_los_percentiles_de_latencia(thresholds) -> None:
     muestras = healthy(50, latency_ms=40.0) + [
-        sample(offset_s=i, latency_ms=None, rcode=RCODE_TIMEOUT, timed_out=True)
-        for i in range(50)
+        sample(offset_s=i, latency_ms=None, rcode=RCODE_TIMEOUT, timed_out=True) for i in range(50)
     ]
     ventana = window_of(thresholds, muestras)
     assert ventana.latency_p50_ms == pytest.approx(40.0)
