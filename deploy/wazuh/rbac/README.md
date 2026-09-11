@@ -1,5 +1,16 @@
 # Applying the sentinel_ingest RBAC policy
 
+**Correccion post-prueba real (T3):** Wazuh rechaza la creacion de esta politica
+por ser identica a la nativa `events_ingest_resourceless` (accion `event:ingest`,
+recurso `*:*:*`, efecto `allow`) -- error 4009 "already exists". En la practica,
+usa la politica nativa existente en vez de crear `sentinel_ingest.json`:
+
+    curl -k -X GET "https://<manager>:55000/security/policies" \
+      -H "Authorization: Bearer $ADMIN_TOKEN" | grep -A2 events_ingest
+
+Toma el `id` devuelto y usalo directamente en el paso 3 de abajo
+(`policy_ids=<id>`), saltando el paso de creacion de politica.
+
 Wazuh RBAC has no declarative file format -- `sentinel_ingest.json` must be
 POSTed to a running manager. Never version the technical account's password;
 it lives in the secrets referenced by SENTINEL_WAZUH__USERNAME_FILE /
