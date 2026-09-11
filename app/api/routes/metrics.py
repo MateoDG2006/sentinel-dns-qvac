@@ -15,7 +15,7 @@ from app.observability.metrics import SentinelMetrics
 class MetricsApi:
     """GET /metrics — aggregated Prometheus text without identity labels."""
 
-    router = APIRouter()
+    router = APIRouter(tags=["metrics"])
 
     @staticmethod
     async def metrics(
@@ -28,4 +28,5 @@ MetricsApi.router.add_api_route(
     METRICS_PATH,
     MetricsApi.metrics,
     methods=["GET"],
+    summary="Métricas Prometheus agregadas (sin qname ni client_hash)",
 )
