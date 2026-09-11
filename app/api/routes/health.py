@@ -16,7 +16,7 @@ from app.observability.health import HealthProbe
 class HealthApi:
     """GET /health/live and GET /health/ready."""
 
-    router = APIRouter()
+    router = APIRouter(tags=["health"])
 
     @staticmethod
     async def live(
@@ -41,9 +41,11 @@ HealthApi.router.add_api_route(
     HEALTH_LIVE_PATH,
     HealthApi.live,
     methods=["GET"],
+    summary="Liveness: el proceso y el event loop responden",
 )
 HealthApi.router.add_api_route(
     HEALTH_READY_PATH,
     HealthApi.ready,
     methods=["GET"],
+    summary="Readiness: config lista; QVAC/Kafka degradados no fuerzan 503",
 )
