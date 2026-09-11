@@ -32,6 +32,22 @@ pytest.importorskip("testcontainers", reason="los tests de integración requiere
 
 from testcontainers.core.container import DockerContainer  # noqa: E402
 
+
+def _docker_disponible() -> bool:
+    """Tener testcontainers instalado no alcanza: el motor tiene que responder."""
+    try:
+        import docker
+
+        docker.from_env().ping()
+    except Exception:  # noqa: BLE001 - cualquier fallo significa "no hay Docker"
+        return False
+    return True
+
+
+pytestmark = pytest.mark.skipif(
+    not _docker_disponible(), reason="Docker no está disponible en este entorno"
+)
+
 from app.infrastructure.clickhouse.client import (  # noqa: E402
     ClickHouseClient,
     ClickHouseSettingsLike,
