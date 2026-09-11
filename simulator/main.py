@@ -16,6 +16,14 @@ Tiempo real: cada evento se emite en su segundo y lleva `event_ts` = ahora.
 El consumer (A5) descarta eventos con más de `clock_skew_tolerance_seconds`
 (300 s por defecto) de diferencia con su reloj, así que estampar un escenario
 entero por adelantado mandaría sus últimos minutos directo a la DLQ.
+
+Seed y run_id: la seed fija el CONTENIDO del escenario (dominios, tiempos,
+fallos); el `run_id` fija la IDENTIDAD de cada corrida (los `event_id`). Por
+defecto cada ejecución genera un `run_id` nuevo. Si los `event_id` salieran
+solo de la seed, repetir una corrida (por ejemplo, el ensayo antes de grabar
+el video) produciría los mismos IDs, y el `PredictionService` los descartaría
+como duplicados (spec sección 14): la segunda corrida no detectaría nada. Para
+repetir una corrida idéntica, IDs incluidos, se pasa el mismo `--run-id`.
 """
 
 from __future__ import annotations
@@ -40,6 +48,7 @@ from simulator.scenarios import SCENARIOS, ScenarioContext, SyntheticQuery, list
 __all__ = [
     "PlannedEvent",
     "plan",
+    "new_run_id",
     "to_event",
     "ground_truth_labels",
     "publish",
@@ -59,6 +68,7 @@ class PlannedEvent:
 
     event_id: uuid.UUID
     query: SyntheticQuery
+    run_id: str = ""
 
 
 class EventSink(Protocol):
@@ -84,6 +94,7 @@ def plan(
     rate_per_s: float,
     duration_s: float,
     seed: int,
+    run_id: str | None = None,
 ) -> list[PlannedEvent]:
     """Genera la secuencia completa de eventos, ordenada por tiempo.
 
@@ -91,7 +102,11 @@ def plan(
     compartieran la misma, repetirían los mismos `client_hash` y los mismos
     dominios de beaconing, y el detector vería una sola campaña con intervalos
     mezclados en vez de una por zona.
+
+    Sin `run_id` se genera uno nuevo: dos llamadas producen el mismo contenido
+    con `event_id` distintos (ver el docstring del módulo).
     """
+    run_id = run_id or new_run_id()
     spec = SCENARIOS[scenario]
     consultas: list[SyntheticQuery] = []
     for site in sites:
@@ -107,9 +122,16 @@ def plan(
     consultas.sort(key=lambda q: q.offset_s)
 
     # Los IDs salen de un generador aparte para no alterar la secuencia del
-    # escenario: la misma seed produce los mismos eventos con los mismos IDs.
-    ids = random.Random(f"{seed}:event-ids")
-    return [PlannedEvent(uuid.UUID(int=ids.getrandbits(128), version=4), q) for q in consultas]
+    # escenario, y dependen del run_id para que cada corrida tenga los suyos.
+    ids = random.Random(f"{seed}:{run_id}:event-ids")
+    return [
+        PlannedEvent(uuid.UUID(int=ids.getrandbits(128), version=4), q, run_id) for q in consultas
+    ]
+
+
+def new_run_id() -> str:
+    """Identificador corto y único para una corrida del simulador."""
+    return uuid.uuid4().hex[:12]
 
 
 def resolver_id_for(site_id: str) -> str:
@@ -143,6 +165,7 @@ def to_event(planned: PlannedEvent, *, now: datetime) -> NormalizedDnsEvent:
 def ground_truth_labels(planned: PlannedEvent) -> dict[str, Any]:
     truth = planned.query.ground_truth
     return {
+        "run_id": planned.run_id,
         "scenario": truth.scenario,
         "threat_type": truth.threat_type,
         "target_brand": truth.target_brand,
@@ -212,7 +235,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scenario", default="mixed_demo", choices=list_scenarios())
     parser.add_argument("--rate", type=float, default=None, help="eventos/s por sitio y zona")
     parser.add_argument("--duration", type=float, default=None, help="segundos")
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--seed", type=int, default=42, help="fija el contenido del escenario")
+    parser.add_argument(
+        "--run-id",
+        default=None,
+        help=(
+            "identidad de la corrida (define los event_id). Por defecto se genera "
+            "uno nuevo; pasar uno anterior repite la corrida exacta"
+        ),
+    )
     parser.add_argument("--site", type=_csv, default=[SITES[0]], help="uno o varios, con comas")
     parser.add_argument("--zone", type=_csv, default=[DEFAULT_ZONE], help="una o varias, con comas")
     parser.add_argument(
@@ -276,6 +307,7 @@ async def _run_kafka(args: argparse.Namespace, planned: Sequence[PlannedEvent]) 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     rate, duration = _resolve(args)
+    run_id = args.run_id or new_run_id()
     planned = plan(
         args.scenario,
         sites=args.site,
@@ -283,6 +315,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         rate_per_s=rate,
         duration_s=duration,
         seed=args.seed,
+        run_id=run_id,
     )
     if args.dry_run:
         _dry_run(planned)
@@ -290,7 +323,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     combos = len(args.site) * len(args.zone)
     print(
-        f"escenario={args.scenario} seed={args.seed} sitios×zonas={combos} "
+        f"escenario={args.scenario} seed={args.seed} run_id={run_id} sitios×zonas={combos} "
         f"eventos={len(planned)} duracion≈{duration / args.speed:.0f}s "
         f"broker={args.bootstrap}",
         file=sys.stderr,

@@ -18,6 +18,10 @@ from typing import Any
 import clickhouse_connect
 from clickhouse_connect.driver.client import Client
 
+# Error del dominio (RecoverableError): quien atrape los errores recuperables de
+# la app atrapa tambien las caidas de ClickHouse.
+from app.domain.errors import ClickHouseUnavailableError
+
 __all__ = ["ClickHouseClient", "ClickHouseSettingsLike", "DependencyState"]
 
 
@@ -50,10 +54,6 @@ class DependencyState:
     checked_at: datetime
 
 
-class ClickHouseUnavailableError(RuntimeError):
-    """La conexion o la consulta fallo por una causa reintentable."""
-
-
 class ClickHouseClient:
     """Conexion perezosa a ClickHouse con operaciones asincronas."""
 
@@ -73,7 +73,12 @@ class ClickHouseClient:
         async with self._lock:
             if self._client is not None:
                 return
-            self._client = await asyncio.to_thread(self._connect)
+            # clickhouse-connect se conecta al crear el cliente: si ClickHouse
+            # esta caido, falla aca y hay que clasificarlo como recuperable.
+            try:
+                self._client = await asyncio.to_thread(self._connect)
+            except Exception as exc:  # noqa: BLE001 - se reclasifica como recuperable
+                raise ClickHouseUnavailableError(f"no se pudo conectar: {exc}") from exc
 
     def _connect(self) -> Client:
         s = self._settings
