@@ -1,0 +1,32 @@
+{
+  "timestamp_utc": "20260911T054837Z",
+  "model_path": "C:\\Users\\Knn\\Documents\\Projects\\sentinel-dns-qvac\\data\\qvac\\5b8aae816570a09d_Qwen3-0.6B-Q4_0.gguf",
+  "model_sha256": "33bcc57074ec7b6eada5a90651ee546ec0c2b271002c22baf9f1b2dd1e8f75cb",
+  "config_snapshot": {
+    "no_egress": true,
+    "runtime_profile": "hackathon",
+    "qvac_enabled": true,
+    "qvac_cache_dir": "data\\qvac",
+    "qvac_timeout_seconds": 1.5,
+    "kafka_bootstrap_servers": "kafka:9092",
+    "wazuh_base_url": "https://wazuh-manager:55000",
+    "clickhouse_host": "clickhouse"
+  },
+  "config_sha256": "eb1942eafd506692168baecafd3de3a91d8da0bb8dec5da0805b86d7e5c444fa",
+  "public_connection_probe": {
+    "target": "8.8.8.8:53",
+    "blocked": true,
+    "detail": "OSError: [WinError 10065] A socket operation was attempted to an unreachable host"
+  },
+  "inference_result": {
+    "threat_type": "none",
+    "score": 0.0,
+    "model_id": "9a17b2afc4d5915d",
+    "reasons": [
+      "the domain has a high entropy and unusual length",
+      "the domain is not a known or typical domain",
+      "the domain has a suspicious query rate and suspicious qtype"
+    ]
+  },
+  "verdict": "PASS -- real local inference succeeded while a real public connection attempt failed"
+}
