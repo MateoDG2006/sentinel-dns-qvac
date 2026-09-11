@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Annotated
+from typing import Annotated, Any, ClassVar
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 
 from app.api.dependencies import ApiDependencies
 from app.constants.api import PREDICTIONS_PATH, WEBHOOK_RETRY_AFTER_SECONDS
@@ -18,15 +18,84 @@ from app.observability.metrics import SentinelMetrics
 from app.services.prediction import PredictionService
 
 
+class WebhookDocsExamples:
+    """Static Try-it-out payloads for /docs. Not production traffic."""
+
+    _STAMP: ClassVar[str] = "2026-09-10T12:00:00+00:00"
+
+    @staticmethod
+    def _event(*, event_id: str, qname: str, rcode: str = "NOERROR") -> dict[str, Any]:
+        return {
+            "event_id": event_id,
+            "event_ts": WebhookDocsExamples._STAMP,
+            "observed_at": WebhookDocsExamples._STAMP,
+            "site_id": "pop-1",
+            "zone_id": "zone-a",
+            "resolver_id": "resolver-1",
+            "client_hash": "client-hash-1",
+            "qname": qname,
+            "qtype": "A",
+            "rcode": rcode,
+            "latency_ms": 25.0,
+            "response_bytes": 128,
+            "timed_out": False,
+            "synthetic": True,
+        }
+
+    @staticmethod
+    def openapi_examples() -> dict[str, dict[str, Any]]:
+        return {
+            "benign": {
+                "summary": "Consulta benigna",
+                "description": "www.example.com → threat none, mode heuristic_fallback.",
+                "value": {
+                    "events": [
+                        WebhookDocsExamples._event(
+                            event_id="11111111-1111-1111-1111-111111111111",
+                            qname="www.example.com",
+                        )
+                    ]
+                },
+            },
+            "dga": {
+                "summary": "DGA sintético (NXDOMAIN)",
+                "description": "Label larga de alta entropía. Cambia event_id si reenvías.",
+                "value": {
+                    "events": [
+                        WebhookDocsExamples._event(
+                            event_id="22222222-2222-2222-2222-222222222222",
+                            qname="xkqpwzlmntabvdfg.test",
+                            rcode="NXDOMAIN",
+                        )
+                    ]
+                },
+            },
+            "typosquatting": {
+                "summary": "Typosquatting contra marca de brands.yaml",
+                "value": {
+                    "events": [
+                        WebhookDocsExamples._event(
+                            event_id="33333333-3333-3333-3333-333333333333",
+                            qname="acmebannk.test",
+                        )
+                    ]
+                },
+            },
+        }
+
+
 class PredictionsApi:
     """POST /api/v1/predictions — 202 without waiting for Wazuh."""
 
-    router = APIRouter()
+    router = APIRouter(tags=["predictions"])
     _logger = logging.getLogger("app.api.predictions")
 
     @staticmethod
     async def create_predictions(
-        payload: PredictionRequest,
+        payload: Annotated[
+            PredictionRequest,
+            Body(openapi_examples=WebhookDocsExamples.openapi_examples()),
+        ],
         service: Annotated[PredictionService, Depends(ApiDependencies.prediction_service)],
         metrics: Annotated[SentinelMetrics, Depends(ApiDependencies.metrics)],
         _: Annotated[None, Depends(ApiDependencies.require_webhook_token)],
@@ -115,4 +184,10 @@ PredictionsApi.router.add_api_route(
     methods=["POST"],
     status_code=status.HTTP_202_ACCEPTED,
     response_model=PredictionReceipt,
+    summary="Aceptar 1..100 eventos DNS sintéticos",
+    responses={
+        401: {"description": "Token ausente o inválido"},
+        422: {"description": "Esquema inválido o synthetic=false"},
+        429: {"description": "Cola interna llena; Retry-After"},
+    },
 )
