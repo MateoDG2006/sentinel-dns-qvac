@@ -14,7 +14,7 @@ from app.domain.enums import RuntimeProfile
 
 
 def test_default_settings_are_local_and_offline() -> None:
-    settings = Settings()
+    settings = Settings(_env_file=None)
     assert settings.app_host == "127.0.0.1"
     assert settings.app_port == 8000
     assert settings.no_egress is True
