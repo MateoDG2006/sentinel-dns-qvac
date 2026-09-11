@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.domain.ports import OutboxPort
 from app.domain.schemas import OutboxRecord
@@ -41,15 +41,13 @@ class OutboxDispatcher:
             return 0
 
         results = await self._deliver(batch)
-        delivered_ids = [r.id for r, ok in zip(batch, results) if ok]
-        failed = [r for r, ok in zip(batch, results) if not ok]
+        delivered_ids = [r.id for r, ok in zip(batch, results, strict=True) if ok]
+        failed = [r for r, ok in zip(batch, results, strict=True) if not ok]
 
         if delivered_ids:
             await self._outbox.mark_delivered(delivered_ids)
         if failed:
-            retry_at = datetime.now(timezone.utc) + timedelta(
-                seconds=self._base_backoff_seconds
-            )
+            retry_at = datetime.now(UTC) + timedelta(seconds=self._base_backoff_seconds)
             await self._outbox.reschedule(
                 [r.id for r in failed], retry_at, reason="delivery_failed"
             )

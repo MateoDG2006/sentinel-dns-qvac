@@ -2,7 +2,7 @@
 
 Inteligencia local sobre telemetría DNS para detectar amenazas y medir la calidad de experiencia sin enviar consultas ni datos derivados fuera del datacenter.
 
-> **Estado:** estructura y documentación inicial. La aplicación y el stack Docker/Kubernetes todavía están en implementación; consulta el [plan de trabajo](docs/WORK_PLAN.md).
+> **Estado:** MVP ejecutable en Compose (`make up` / `make full`). Kubernetes se valida con Kustomize (ADR-010). El video de demo (I2) y el E2E contra un clúster Wazuh completo siguen abiertos.
 
 ## Problema
 
@@ -89,46 +89,51 @@ docs/                    # Arquitectura, ADR, operación y coordinación
 ## Estado de implementación
 
 - [x] Especificación técnica y decisiones arquitectónicas.
-- [x] Estructura inicial del repositorio.
-- [x] Reglas para trabajo con agentes.
-- [ ] Contratos de dominio y configuración.
-- [ ] FastAPI y webhook `POST /api/v1/predictions`.
-- [ ] Consumer Kafka y simulador sintético.
-- [ ] Features, heurísticas y adaptador QVAC.
-- [ ] Outbox e integración Wazuh.
-- [ ] QoE, ClickHouse y Grafana.
-- [ ] Docker Compose ejecutable.
-- [ ] Manifiestos Kubernetes validados.
-- [ ] Pruebas E2E y evidencia sin egress.
+- [x] Contratos de dominio y configuración.
+- [x] FastAPI y webhook `POST /api/v1/predictions`.
+- [x] Consumer Kafka y simulador sintético.
+- [x] Features, heurísticas y adaptador QVAC.
+- [x] Outbox e integración Wazuh (reglas JSON decoder; dashboard/indexer en K8s).
+- [x] QoE, ClickHouse y Grafana.
+- [x] Docker Compose perfiles `core` / `security` / `demo` / `full`.
+- [x] Manifiestos Kubernetes validados (C5).
+- [ ] Pruebas E2E con Wazuh UI y video <5 min (I1/I2).
 
 ## Desarrollo local
 
-### Requisitos previstos
+### Requisitos
 
 - Python 3.11.
 - Node.js 22.17 o superior para el worker QVAC.
 - `uv` para dependencias Python.
 - Docker con Docker Compose.
-- `kubectl`, Kustomize y kubeconform para validar Kubernetes.
-- Recursos suficientes para Kafka, ClickHouse y el stack completo de Wazuh.
+- `kubectl` y kubeconform para validar Kubernetes (C5).
 
-### Situación actual
+### Quickstart
 
-`pyproject.toml`, `compose.yaml`, `Dockerfile`, `.env.example` y los scripts son placeholders. El quickstart ejecutable se añadirá al completar las tareas A1 y C4 del [plan](docs/WORK_PLAN.md). No se debe interpretar el scaffold como una aplicación funcional.
+```text
+make env          # copia .env.example; rellena SENTINEL_WEBHOOK_TOKEN
+make sync
+make bootstrap    # una vez, con red; el GGUF queda en data/qvac/
+make up           # perfil core
+make api          # opcional: API en el host (Kafka en localhost:29092)
+```
 
-### Flujo objetivo
+Demo canónica:
 
-Cuando la implementación esté disponible, el proceso será:
+```text
+make full         # core + wazuh-manager + simulador mixed_demo
+uv run python scripts/smoke_test.py
+```
 
-1. Copiar `.env.example` a un archivo local no versionado y configurar secretos.
-2. Preparar el modelo QVAC en un volumen local.
-3. Instalar las dependencias bloqueadas con `uv`.
-4. Levantar el profile Docker Compose `full`.
-5. Ejecutar el smoke test y el escenario sintético `mixed_demo`.
-6. Abrir Wazuh y Grafana para comprobar alertas y QoE.
-7. Ejecutar la prueba sin egress.
+- API: http://127.0.0.1:8000/docs y `/lab`
+- Grafana (anónimo Viewer): http://127.0.0.1:3000
+- Prometheus: http://127.0.0.1:9090
+- Wazuh API: https://127.0.0.1:55000 (credenciales en `.env`, no en git)
 
-Los comandos se publicarán en [OPERATIONS.md](docs/OPERATIONS.md) únicamente cuando hayan sido probados.
+El webhook usa `X-Sentinel-Token`. Wazuh recibe `POST /events` con JWT. Las reglas viven en `deploy/wazuh/rules/sentinel_dns_rules.xml` y se decodifican como JSON (`decoded_as=json`).
+
+Kubernetes (sin clúster): `make validate-k8s` o `kubectl kustomize deploy/kubernetes/overlays/local`.
 
 ## API prevista
 

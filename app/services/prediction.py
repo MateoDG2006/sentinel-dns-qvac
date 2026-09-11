@@ -9,7 +9,7 @@ from typing import Protocol
 from uuid import UUID, uuid5
 
 from app.constants.health import OUTBOX_DEPENDENCY_NAME, OUTBOX_VOLATILE_DETAIL
-from app.constants.prediction import PREDICTION_ID_NAMESPACE
+from app.constants.prediction import PREDICTION_ID_NAMESPACE, QVAC_DEGRADED_ALERT_SECONDS
 from app.core.config import Settings
 from app.domain.enums import (
     DependencyStatus,
@@ -197,6 +197,7 @@ class PredictionService:
         self._history = QueryWindow(window_seconds=settings.qoe_window_seconds)
         self._results_by_event: dict[UUID, PredictionResult] = {}
         self._qvac_degraded_alerted = False
+        self._qvac_degraded_since: datetime | None = None
 
     @property
     def queue(self) -> InternalQueue:
@@ -244,6 +245,9 @@ class PredictionService:
             await self._enqueue_threat(event, prediction, mode)
         if enrichment.degraded:
             await self._enqueue_qvac_degraded(event, prediction)
+        else:
+            self._qvac_degraded_since = None
+            self._qvac_degraded_alerted = False
         return result
 
     async def _enrich(
@@ -367,7 +371,11 @@ class PredictionService:
         event: NormalizedDnsEvent,
         prediction: ThreatPrediction,
     ) -> None:
-        if self._qvac_degraded_alerted:
+        if self._qvac_degraded_since is None:
+            self._qvac_degraded_since = event.event_ts
+            return
+        elapsed = (event.event_ts - self._qvac_degraded_since).total_seconds()
+        if elapsed < QVAC_DEGRADED_ALERT_SECONDS or self._qvac_degraded_alerted:
             return
         payload = WazuhThreatEvent(
             event_type=WazuhEventType.SENTINEL_OPERATIONAL,
@@ -380,7 +388,7 @@ class PredictionService:
                 type=ThreatType.NONE,
                 confidence=0.0,
                 severity=prediction.severity,
-                reasons=["qvac_degraded"],
+                reasons=["qvac_degraded", f"duration_seconds_{int(elapsed)}"],
             ),
             detector=WazuhDetectorFields(
                 runtime=DetectorRuntime.HEURISTIC_FALLBACK,
@@ -389,7 +397,10 @@ class PredictionService:
         )
         inserted = await self._enqueue(
             OutboxRecord(
-                id=uuid5(PREDICTION_ID_NAMESPACE, "operational:qvac_degraded"),
+                id=uuid5(
+                    PREDICTION_ID_NAMESPACE,
+                    f"operational:qvac_degraded:{self._qvac_degraded_since.isoformat()}",
+                ),
                 event_id=event.event_id,
                 prediction_id=prediction.prediction_id,
                 created_at=prediction.created_at,

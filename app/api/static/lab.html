@@ -143,7 +143,7 @@
         </div>
         <div>
           <label for="duration">Ventana sintética (s)</label>
-          <input id="duration" name="duration" type="number" min="1" max="30" step="1" value="8">
+          <input id="duration" name="duration" type="number" min="1" max="120" step="1" value="8">
         </div>
         <div style="display:flex;align-items:end;">
           <button type="submit" id="run">Evaluar pipeline</button>
@@ -220,6 +220,7 @@
         opt.value = item.name;
         opt.textContent = item.name;
         opt.dataset.description = item.description;
+        opt.dataset.duration = String(item.default_duration_s || 8);
         scenarioSelect.appendChild(opt);
       }
       const mixed = [...scenarioSelect.options].find((o) => o.value === "mixed_demo");
@@ -229,6 +230,13 @@
 
     function updateHelp() {
       const opt = scenarioSelect.selectedOptions[0];
+      if (opt && opt.dataset.duration) {
+        const durationInput = document.getElementById("duration");
+        const suggested = Number(opt.dataset.duration);
+        if (suggested > 0) {
+          durationInput.value = String(Math.min(120, Math.max(1, suggested)));
+        }
+      }
       help.textContent = opt && opt.dataset.description
         ? opt.dataset.description + " Ground truth no viaja en el evento; el lab lo compara al lado."
         : "";

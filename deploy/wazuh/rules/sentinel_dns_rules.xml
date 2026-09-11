@@ -25,11 +25,11 @@
   Targets a pre-5.0 Wazuh manager. See the flag raised alongside this file
   about wazuh/wazuh#34848 (proposed removal of POST /events in 5.0).
 -->
-<!-- Sentinel-DNS custom rules (WBS B3). See docs/wazuh_rules_notes.md for design notes and open assumptions. -->
+<!-- Sentinel-DNS custom rules (WBS B3). POST /events JSON uses the built-in json decoder. -->
 <group name="sentinel_dns,">
 
   <rule id="100199" level="0">
-    <decoded_as>sentinel_dns</decoded_as>
+    <decoded_as>json</decoded_as>
     <field name="integration">^sentinel-dns$</field>
     <description>Sentinel-DNS event</description>
   </rule>

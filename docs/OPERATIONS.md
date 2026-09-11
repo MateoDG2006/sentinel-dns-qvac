@@ -2,16 +2,16 @@
 
 ## Entornos
 
-- **Host + Compose parcial (camino actual):** Kafka, ClickHouse y Grafana en Docker; API/consumer/QVAC con `make api` en el host.
-- Docker Compose `full` (C4): demo canónica cuando existan Wazuh, Prometheus y sentinel-api en el stack.
-- Kubernetes: manifiestos renderizados y validados; no se exige despliegue.
+- **Host + Compose core:** Kafka, ClickHouse, Grafana, Prometheus y `sentinel-api` (`make up`). API/QVAC también pueden correr en el host con `make api`.
+- **Compose full:** `make full` añade `wazuh-manager` y el simulador `mixed_demo`. Indexer/dashboard Wazuh están en los manifiestos Kubernetes (C5), no en Compose.
+- **Kubernetes:** manifiestos renderizados y validados; no se exige despliegue (ADR-010).
 
 ## Arranque en el host
 
 1. `make env` y rellenar `SENTINEL_WEBHOOK_TOKEN` (nunca commitear `.env`).
 2. `make sync` (`uv sync` + `npm install` para `@qvac/sdk` local).
 3. `make bootstrap` una vez (GGUF en `data/qvac/`); después `make qvac-smoke`.
-4. `make up` (Kafka + ClickHouse/Grafana).
+4. `make up` (perfil `core`) o `make full` (incluye Wazuh manager y el simulador).
 5. `make api` — fuerza `SENTINEL_KAFKA__BOOTSTRAP_SERVERS=localhost:29092` y `SENTINEL_CLICKHOUSE__HOST=localhost`.
 6. Lab: `http://127.0.0.1:8000/lab`. Simulador: `uv run python -m simulator.main --scenario mixed_demo --seed 42`.
 

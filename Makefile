@@ -1,11 +1,8 @@
-# Sentinel-DNS — comandos para la infra que existe hoy.
-#
-# Disponible: Kafka local (C1), ClickHouse/Grafana (C3) y API/consumer/QVAC en el host.
-# Wazuh y los perfiles Compose full siguen en C4.
-# El CLI del simulador (simulator/main.py) publica a Kafka cuando el broker está up.
-#
-# Windows (PowerShell): GNU Make usa cmd.exe; las recetas evitan bash.
-# Linux/macOS: recetas POSIX.
+# Sentinel-DNS — comandos locales.
+
+# make up    perfil core (Kafka, ClickHouse, Grafana, Prometheus, API)
+# make full  perfil full (core + Wazuh manager + simulador mixed_demo)
+# make api   API en el host contra Kafka/ClickHouse publicados en loopback
 
 .DEFAULT_GOAL := help
 
@@ -16,39 +13,36 @@ CLICKHOUSE_HOST := localhost
 API_HOST := 127.0.0.1
 API_PORT := 8000
 
-.PHONY: help env sync kafka up down logs ps wait-kafka topics \
-	bootstrap qvac-smoke api dev check test fmt
+.PHONY: help env sync kafka up full down logs ps wait-kafka topics \
+	bootstrap qvac-smoke api dev check test fmt smoke validate-k8s
 
 help:
-	$(info Infra actual: Kafka Compose + API en el host)
+	$(info   make env            Copia .env.example a .env si no existe)
+	$(info   make sync           uv sync + npm install (@qvac/sdk local))
+	$(info   make up             Perfil core: Kafka, ClickHouse, Grafana, Prometheus, API)
+	$(info   make full           Perfil full: core + Wazuh manager + simulador)
+	$(info   make wait-kafka     Espera healthcheck de sentinel-kafka)
+	$(info   make topics         Lista topics congelados)
+	$(info   make down           Para el stack Compose)
+	$(info   make bootstrap      Descarga el GGUF a data/qvac (requiere red))
+	$(info   make qvac-smoke     Comprueba cache local, no descarga)
+	$(info   make api            Uvicorn en el host contra loopback)
+	$(info   make smoke          scripts/smoke_test.py)
+	$(info   make validate-k8s   Kustomize + kubeconform + policy)
+	$(info   make check          ruff + mypy + pytest unit)
 	$(info)
-	$(info   make env          Copia .env.example a .env si no existe)
-	$(info   make sync         uv sync + npm install (@qvac/sdk local))
-	$(info   make up           Levanta Kafka y crea topics)
-	$(info   make wait-kafka   Espera healthcheck de sentinel-kafka)
-	$(info   make topics       Lista topics congelados)
-	$(info   make logs         Logs de Kafka)
-	$(info   make down         Para el stack Compose)
-	$(info   make bootstrap    Descarga el GGUF a data/qvac (red; usa node_modules/@qvac/sdk))
-	$(info   make qvac-smoke   Comprueba cache local, no descarga)
-	$(info   make api          Uvicorn en $(API_HOST):$(API_PORT) contra Kafka/ClickHouse del host)
-	$(info   make dev          env + sync + up)
-	$(info   make check        ruff + mypy + pytest unit)
-	$(info   make test         pytest tests/unit)
-	$(info)
-	$(info Lab QVAC: http://$(API_HOST):$(API_PORT)/lab)
-	$(info Docs: http://$(API_HOST):$(API_PORT)/docs)
-	$(info Kafka host: $(KAFKA_HOST_BOOTSTRAP))
+	$(info Lab: http://$(API_HOST):$(API_PORT)/lab)
+	$(info Grafana: http://127.0.0.1:3000)
 	@:
 
 ifeq ($(OS),Windows_NT)
 env:
-	powershell -NoProfile -Command "if (-not (Test-Path -LiteralPath '.env')) { Copy-Item .env.example .env; Write-Host 'Creado .env. Rellena SENTINEL_WEBHOOK_TOKEN.' } else { Write-Host '.env ya existe' }"
+	powershell -NoProfile -Command "if (-not (Test-Path -LiteralPath '.env')) { Copy-Item .env.example .env; Write-Host 'Creado .env. Rellena SENTINEL_WEBHOOK_TOKEN y credenciales Wazuh.' } else { Write-Host '.env ya existe' }"
 else
 ifeq ($(wildcard .env),)
 env:
 	cp .env.example .env
-	@echo Creado .env. Rellena SENTINEL_WEBHOOK_TOKEN.
+	@echo Creado .env. Rellena SENTINEL_WEBHOOK_TOKEN y credenciales Wazuh.
 else
 env:
 	@echo .env ya existe
@@ -59,8 +53,12 @@ sync:
 	$(UV) sync
 	npm install
 
-up:
-	$(COMPOSE) up -d
+up: env
+	$(COMPOSE) --profile core up -d --build
+	@$(MAKE) wait-kafka
+
+full: env
+	$(COMPOSE) --profile full up -d --build
 	@$(MAKE) wait-kafka
 
 kafka: up
@@ -85,13 +83,13 @@ topics:
 	docker exec sentinel-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
 
 logs:
-	$(COMPOSE) logs -f kafka
+	$(COMPOSE) --profile core logs -f
 
 ps:
-	$(COMPOSE) ps -a
+	$(COMPOSE) --profile full ps -a
 
 down:
-	$(COMPOSE) down
+	$(COMPOSE) --profile full down
 
 bootstrap:
 	$(UV) run python scripts/bootstrap_models.py
@@ -99,6 +97,11 @@ bootstrap:
 qvac-smoke:
 	$(UV) run python scripts/bootstrap_models.py --smoke
 
+smoke:
+	$(UV) run python scripts/smoke_test.py
+
+validate-k8s:
+	$(UV) run python scripts/validate_manifests.py
 
 ifeq ($(OS),Windows_NT)
 api: env
@@ -114,10 +117,10 @@ endif
 
 dev: env sync up
 	$(info)
-	$(info Stack listo. Siguiente:)
+	$(info Stack core listo. Siguiente:)
 	$(info   1. Rellena SENTINEL_WEBHOOK_TOKEN en .env)
 	$(info   2. make bootstrap   (si data/qvac ya tiene el GGUF: make qvac-smoke))
-	$(info   3. make api)
+	$(info   3. make api   o deja sentinel-api del compose)
 	$(info   4. http://$(API_HOST):$(API_PORT)/lab)
 	@:
 

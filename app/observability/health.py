@@ -95,6 +95,9 @@ class HealthProbe:
         if kafka_health.status is DependencyStatus.DOWN:
             payload["status"] = "not_ready"
             return 503, payload
+        if outbox_health.status is DependencyStatus.DOWN:
+            payload["status"] = "not_ready"
+            return 503, payload
         return 200, payload
 
     async def _kafka_health(

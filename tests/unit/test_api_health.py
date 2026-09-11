@@ -90,6 +90,28 @@ async def test_health_ready_reports_qvac_and_kafka_up() -> None:
     assert by_name["outbox"]["status"] == DependencyStatus.UP.value
 
 
+async def test_health_ready_returns_503_when_outbox_is_down() -> None:
+    checked_at = UtcDateTime.ensure(datetime.now(UTC))
+    probe = HealthProbe(Settings(webhook_token=WEBHOOK_TOKEN))
+
+    class _Down:
+        async def health(self) -> DependencyHealth:
+            return DependencyHealth(
+                name="outbox",
+                status=DependencyStatus.DOWN,
+                detail="sqlite_unavailable",
+                checked_at=checked_at,
+            )
+
+    status_code, body = await probe.readiness(
+        service_state=ServiceState.READY,
+        outbox=_Down(),
+        kafka_enabled=False,
+    )
+    assert status_code == 503
+    assert body["status"] == "not_ready"
+
+
 def test_metrics_exposes_spec_names_without_identity_labels() -> None:
     with _client() as client:
         response = client.get(METRICS_PATH)

@@ -218,8 +218,7 @@ def main() -> int:
         },
         "inference_result": inference_result,
         "verdict": (
-            "PASS -- real local inference succeeded while a real public "
-            "connection attempt failed"
+            "PASS -- real local inference succeeded while a real public connection attempt failed"
         ),
     }
     evidence_path.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")

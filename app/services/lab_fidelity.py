@@ -6,7 +6,7 @@ Uses C1's simulator generators. Ground truth never enters NormalizedDnsEvent.
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -156,11 +156,13 @@ class LabFidelityService:
         sampled = LabBatchSampler.take(planned, request.limit)
         if not sampled:
             raise ValueError("el escenario no produjo eventos en esa ventana")
-        now = datetime.now(UTC)
+        origin = datetime.now(UTC)
         events: list[NormalizedDnsEvent] = []
         labels: list[dict[str, str | None]] = []
         for item in sampled:
-            event = to_event(item, now=now).model_copy(update={"event_id": uuid4()})
+            event = to_event(item, now=origin + timedelta(seconds=item.query.offset_s)).model_copy(
+                update={"event_id": uuid4()}
+            )
             events.append(event)
             raw = ground_truth_labels(item)
             technique = raw.get("technique")
@@ -196,11 +198,12 @@ class LabFidelityService:
         sampled = loader.take_stratified(planned, request.limit)
         if not sampled:
             raise ValueError("no hay fixtures LogoDNSQueries para evaluar")
-        now = datetime.now(UTC)
+        origin = datetime.now(UTC)
+        earliest = min(item.event.event_ts for item in sampled)
         events: list[NormalizedDnsEvent] = []
         labels: list[dict[str, str | None]] = []
         for item in sampled:
-            stamped = loader.stamp(item, now=now)
+            stamped = loader.stamp(item, now=origin + (item.event.event_ts - earliest))
             events.append(stamped.event)
             sidecar = loader.labels(stamped)
             labels.append(

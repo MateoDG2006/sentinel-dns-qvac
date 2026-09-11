@@ -165,7 +165,7 @@ class WazuhClient:
                 rejected=rejected,
                 retryable=False,
                 status_code=response.status_code,
-    )
+            )
         # Any other 4xx: a permanent request/payload problem (Wazuh's own
         # docs show this shape for a malformed request: {"error": "3013",
         # "message": {"title": ..., "detail": ...}}). The bulk endpoint

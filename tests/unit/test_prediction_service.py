@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -161,12 +161,25 @@ async def test_qvac_timeout_falls_back_and_enqueues_operational_alert() -> None:
         enrichment=QvacEnrichmentService(port, settings=settings),
         outbox=outbox,
     )
-    first = _event()
-    second = _event()
-    results = await service.process_batch([first, second], EventSource.KAFKA)
-    assert port.calls == 2
+    start = datetime.now(UTC)
+    first = _event(event_ts=start, observed_at=start)
+    close = _event(
+        event_ts=start + timedelta(seconds=5),
+        observed_at=start + timedelta(seconds=5),
+    )
+    later = _event(
+        event_ts=start + timedelta(seconds=61),
+        observed_at=start + timedelta(seconds=61),
+    )
+    early = await service.process_batch([first, close], EventSource.KAFKA)
+    assert all(item.prediction.degraded is True for item in early)
+    assert all(
+        record.record_type is not WazuhEventType.SENTINEL_OPERATIONAL
+        for record in outbox.payloads()
+    )
+    results = await service.process_batch([later], EventSource.KAFKA)
+    assert port.calls == 3
     assert all(item.mode is PredictionMode.HEURISTIC_FALLBACK for item in results)
-    assert all(item.prediction.degraded is True for item in results)
     types = {record.record_type for record in outbox.payloads()}
     assert WazuhEventType.DNS_THREAT in types
     assert WazuhEventType.SENTINEL_OPERATIONAL in types
@@ -176,6 +189,70 @@ async def test_qvac_timeout_falls_back_and_enqueues_operational_alert() -> None:
         if record.record_type is WazuhEventType.SENTINEL_OPERATIONAL
     ]
     assert len(operational) == 1
+
+
+async def test_qvac_recovery_clears_degraded_alert_latch() -> None:
+    port = FakeQvacPort(error=QvacTimeoutError())
+    settings = Settings()
+    outbox = VolatileOutbox()
+    detector = FakeDetector(_ambiguous_dga())
+    service = PredictionService(
+        settings,
+        detector=detector,
+        enrichment=QvacEnrichmentService(port, settings=settings),
+        outbox=outbox,
+    )
+    start = datetime.now(UTC)
+    await service.process_batch(
+        [
+            _event(event_ts=start, observed_at=start),
+            _event(
+                event_ts=start + timedelta(seconds=61),
+                observed_at=start + timedelta(seconds=61),
+            ),
+        ],
+        EventSource.KAFKA,
+    )
+    assert (
+        sum(
+            1
+            for record in outbox.payloads()
+            if record.record_type is WazuhEventType.SENTINEL_OPERATIONAL
+        )
+        == 1
+    )
+    port._error = None
+    port._verdict = QvacVerdict(
+        threat_type=ThreatType.NONE,
+        score=0.1,
+        reasons=["benign"],
+        model_id="test-model",
+    )
+    recovered_at = start + timedelta(seconds=70)
+    recovered = await service.process_batch(
+        [_event(event_ts=recovered_at, observed_at=recovered_at, qname="ok.example.com")],
+        EventSource.KAFKA,
+    )
+    assert recovered[0].prediction.degraded is False
+    port._error = QvacTimeoutError()
+    port._verdict = None
+    episode = start + timedelta(seconds=80)
+    await service.process_batch(
+        [
+            _event(event_ts=episode, observed_at=episode),
+            _event(
+                event_ts=episode + timedelta(seconds=61),
+                observed_at=episode + timedelta(seconds=61),
+            ),
+        ],
+        EventSource.KAFKA,
+    )
+    operational = [
+        record
+        for record in outbox.payloads()
+        if record.record_type is WazuhEventType.SENTINEL_OPERATIONAL
+    ]
+    assert len(operational) == 2
 
 
 async def test_high_confidence_skips_qvac_hot_path() -> None:

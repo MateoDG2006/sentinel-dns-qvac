@@ -1,4 +1,3 @@
-
 """Prepare the local QVAC model cache.
 
 Requires network. Never invoked by the runtime adapter. Run this before

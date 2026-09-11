@@ -1,13 +1,24 @@
-# Stack local de Sentinel-DNS.
+# Stack local de Sentinel-DNS (C4).
 #
-# Alcance actual: Kafka (C1) y la parte de QoE (C3): ClickHouse y Grafana.
-# Prometheus, Wazuh, sentinel-api y los perfiles core/security/demo/full se
-# agregan en C4 segun la spec seccion 16.
+# Perfiles:
+#   core      Kafka, ClickHouse, Grafana, Prometheus, sentinel-api
+#   security  Wazuh manager (API POST /events)
+#   demo      simulador mixed_demo
+#   full      core + security + demo
+#
+# Un comando: `docker compose --profile full up -d --build` o `make full`.
+# `make up` usa el perfil core (Kafka/CH/Grafana/API) para desarrollo en host.
 #
 # Los nombres de servicio y puertos deben coincidir con los defaults de
 # app/core/config.py y de deploy/grafana/provisioning:
 #   kafka:9092       SENTINEL_KAFKA__BOOTSTRAP_SERVERS
 #   clickhouse:8123  SENTINEL_CLICKHOUSE__HOST / HTTP_PORT y el datasource
+#   wazuh-manager:55000  SENTINEL_WAZUH__BASE_URL
+#
+# Indexer y dashboard Wazuh son declarativos en Kubernetes (C5). En Compose
+# el manager basta para POST /events; las reglas usan el decoder JSON.
+#
+# Todos los puertos publicados escuchan solo en loopback (spec seccion 5).
 #
 # Todos los puertos publicados escuchan solo en loopback (spec seccion 5).
 #

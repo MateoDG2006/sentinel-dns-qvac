@@ -109,6 +109,22 @@ def test_catalog_service_matches_simulator() -> None:
     assert "logo_dns" in names
 
 
+def test_beaconing_lab_sample_keeps_distinct_offsets() -> None:
+    spec = get_scenario("beaconing")
+    planned = plan(
+        "beaconing",
+        sites=[SITES[0]],
+        zones=[DEFAULT_ZONE],
+        rate_per_s=spec.default_rate_per_s,
+        duration_s=20.0,
+        seed=42,
+    )
+    sampled = LabBatchSampler.take(planned, 8)
+    offsets = {round(item.query.offset_s, 3) for item in sampled}
+    assert len(sampled) >= 2
+    assert len(offsets) > 1
+
+
 def test_evaluate_logo_dns_returns_sidecar_labels() -> None:
     with _client() as client:
         response = client.post(
