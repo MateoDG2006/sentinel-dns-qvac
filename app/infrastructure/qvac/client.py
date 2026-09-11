@@ -114,6 +114,15 @@ class QvacClient:
         self._detail: str | None = "qvac has not started"
         self._semaphore = asyncio.Semaphore(self._settings.qvac_concurrency)
 
+    @staticmethod
+    def open_sdk(settings: Settings, cache_dir: str, *, log_console: bool = False) -> Client:
+        return Client(
+            worker_path=str(settings.qvac_worker_path) if settings.qvac_worker_path else None,
+            bare_path=str(settings.qvac_bare_path) if settings.qvac_bare_path else None,
+            sdk_dir=str(settings.qvac_sdk_dir.expanduser().resolve()),
+            config={"cacheDirectory": cache_dir, "loggerConsoleOutput": log_console},
+        )
+
     async def start(self) -> None:
         if self._available:
             return
@@ -131,14 +140,8 @@ class QvacClient:
             return
         cache_dir = str(self._cache.cache_dir.resolve())
         os.environ["QVAC_CACHE_DIR"] = cache_dir
-        worker_path = (
-            str(self._settings.qvac_worker_path) if self._settings.qvac_worker_path else None
-        )
         try:
-            self._sdk = Client(
-                worker_path=worker_path,
-                config={"cacheDirectory": cache_dir, "loggerConsoleOutput": False},
-            )
+            self._sdk = QvacClient.open_sdk(self._settings, cache_dir)
             await self._sdk.connect()
             self._model_id = await load_model(
                 self._sdk.transport,
@@ -255,13 +258,7 @@ class QvacModelBootstrap:
         cache_dir.mkdir(parents=True, exist_ok=True)
         cache_path = str(cache_dir.resolve())
         os.environ["QVAC_CACHE_DIR"] = cache_path
-        worker_path = (
-            str(self._settings.qvac_worker_path) if self._settings.qvac_worker_path else None
-        )
-        client = Client(
-            worker_path=worker_path,
-            config={"cacheDirectory": cache_path},
-        )
+        client = QvacClient.open_sdk(self._settings, cache_path)
         async with client:
             model_id = await load_model(client.transport, model_src=model_src)
             gguf = self._cache.resolve()

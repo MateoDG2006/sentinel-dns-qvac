@@ -24,6 +24,7 @@ def test_default_settings_are_local_and_offline() -> None:
     assert settings.kafka.topic_dlq == TOPIC_DLQ
     assert settings.kafka.topic_groundtruth == TOPIC_GROUNDTRUTH
     assert settings.clickhouse.qoe_table == QOE_TABLE
+    assert settings.qvac_sdk_dir == Path("node_modules") / "@qvac" / "sdk"
     assert settings.qvac_timeout_seconds == 1.5
     assert settings.qvac_concurrency == 1
     assert settings.wazuh.verify_tls is True
@@ -60,6 +61,12 @@ def test_qvac_cache_dir_honors_spec_env_name(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("QVAC_CACHE_DIR", "data/custom-qvac")
     settings = Settings()
     assert settings.qvac_cache_dir == Path("data/custom-qvac")
+
+
+def test_qvac_sdk_dir_honors_spec_env_name(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("QVAC_SDK_DIR", str(tmp_path / "qvac-sdk"))
+    settings = Settings()
+    assert settings.qvac_sdk_dir == tmp_path / "qvac-sdk"
 
 
 def test_settings_get_returns_cached_instance() -> None:
