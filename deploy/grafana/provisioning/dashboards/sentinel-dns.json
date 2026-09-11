@@ -1,0 +1,405 @@
+{
+  "uid": "sentinel-dns-qoe",
+  "title": "Sentinel-DNS · Calidad de experiencia",
+  "description": "Score de QoE por sitio y zona, con sus tres subscores, el volumen de muestras y la causa principal. Fuente: sentinel_dns.dns_qoe_1m_latest.",
+  "tags": ["sentinel-dns", "qoe", "dns"],
+  "timezone": "utc",
+  "editable": false,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": { "refresh_intervals": ["10s", "30s", "1m", "5m"] },
+  "templating": {
+    "list": [
+      {
+        "name": "site",
+        "label": "Sitio",
+        "type": "query",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+        "query": "SELECT DISTINCT site_id FROM sentinel_dns.dns_qoe_1m ORDER BY site_id",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "current": { "text": "All", "value": "$__all" }
+      },
+      {
+        "name": "zone",
+        "label": "Zona",
+        "type": "query",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+        "query": "SELECT DISTINCT zone_id FROM sentinel_dns.dns_qoe_1m WHERE site_id IN (${site:sqlstring}) ORDER BY zone_id",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "current": { "text": "All", "value": "$__all" }
+      },
+      {
+        "name": "calc_version",
+        "label": "Versión de cálculo",
+        "type": "query",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+        "query": "SELECT DISTINCT calculation_version FROM sentinel_dns.dns_qoe_1m ORDER BY calculation_version DESC",
+        "includeAll": false,
+        "multi": false,
+        "refresh": 2,
+        "sort": 2
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "QoE actual por zona",
+      "description": "Última ventana cerrada de cada zona, ordenada de peor a mejor. Verde ≥ 85, naranja 60–85, rojo < 60.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+          "editorType": "sql",
+          "format": 2,
+          "rawSql": "SELECT concat(site_id, ' / ', zone_id) AS zona, argMax(qoe_score, window_start) AS qoe FROM sentinel_dns.dns_qoe_1m_latest WHERE $__timeFilter(window_start) AND site_id IN (${site:sqlstring}) AND zone_id IN (${zone:sqlstring}) AND calculation_version = ${calc_version:sqlstring} GROUP BY site_id, zone_id ORDER BY qoe ASC"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": true },
+        "orientation": "horizontal",
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 60 },
+              { "color": "green", "value": 85 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Evolución del QoE",
+      "description": "Cuándo empezó el deterioro. Las bandas marcan los umbrales de estado: 85 y 60.",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+          "editorType": "sql",
+          "format": 1,
+          "rawSql": "SELECT window_start AS time, concat(site_id, ' / ', zone_id) AS zona, qoe_score FROM sentinel_dns.dns_qoe_1m_latest WHERE $__timeFilter(window_start) AND site_id IN (${site:sqlstring}) AND zone_id IN (${zone:sqlstring}) AND calculation_version = ${calc_version:sqlstring} ORDER BY time"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "partitionByValues",
+          "options": { "fields": ["zona"], "keepFields": false, "naming": { "asLabels": false } }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "auto",
+            "thresholdsStyle": { "mode": "dashed" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 60 },
+              { "color": "green", "value": 85 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min"] },
+        "tooltip": { "mode": "multi", "sort": "asc" }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Subscores",
+      "description": "Descomposición del score: latencia 45%, resolución 30%, saturación 25%. El score nunca debe leerse sin estos tres.",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 6 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+          "editorType": "sql",
+          "format": 1,
+          "rawSql": "SELECT window_start AS time, avg(latency_score) AS \"Latencia (45%)\", avg(resolution_score) AS \"Resolución (30%)\", avg(saturation_score) AS \"Saturación (25%)\" FROM sentinel_dns.dns_qoe_1m_latest WHERE $__timeFilter(window_start) AND site_id IN (${site:sqlstring}) AND zone_id IN (${zone:sqlstring}) AND calculation_version = ${calc_version:sqlstring} GROUP BY time ORDER BY time"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "auto" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min"] },
+        "tooltip": { "mode": "multi", "sort": "asc" }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Latencia p50 / p95 / p99",
+      "description": "Si solo sube el p99, el problema afecta la cola. Si suben los tres, afecta a todos. Umbrales de la spec: bueno 100 ms, crítico 500 ms.",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 15 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+          "editorType": "sql",
+          "format": 1,
+          "rawSql": "SELECT window_start AS time, avg(latency_p50_ms) AS p50, avg(latency_p95_ms) AS p95, avg(latency_p99_ms) AS p99 FROM sentinel_dns.dns_qoe_1m_latest WHERE $__timeFilter(window_start) AND site_id IN (${site:sqlstring}) AND zone_id IN (${zone:sqlstring}) AND calculation_version = ${calc_version:sqlstring} GROUP BY time ORDER BY time"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "auto",
+            "thresholdsStyle": { "mode": "dashed" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 100 },
+              { "color": "red", "value": 500 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Fallos: NXDOMAIN / SERVFAIL / timeout",
+      "description": "Qué tipo de fallo domina. Las tres tasas son excluyentes: un timeout no cuenta además como SERVFAIL.",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 15 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+          "editorType": "sql",
+          "format": 1,
+          "rawSql": "SELECT window_start AS time, avg(nxdomain_pct) AS NXDOMAIN, avg(servfail_pct) AS SERVFAIL, avg(timeout_pct) AS Timeout FROM sentinel_dns.dns_qoe_1m_latest WHERE $__timeFilter(window_start) AND site_id IN (${site:sqlstring}) AND zone_id IN (${zone:sqlstring}) AND calculation_version = ${calc_version:sqlstring} GROUP BY time ORDER BY time"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "stacking": { "mode": "none" },
+            "showPoints": "auto",
+            "thresholdsStyle": { "mode": "dashed" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 5 },
+              { "color": "red", "value": 20 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Matriz sitio × zona",
+      "description": "Dónde está concentrado el impacto. Cada fila es la última ventana cerrada de esa combinación.",
+      "gridPos": { "h": 10, "w": 14, "x": 0, "y": 24 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+          "editorType": "sql",
+          "format": 2,
+          "rawSql": "SELECT site_id AS \"Sitio\", zone_id AS \"Zona\", argMax(qoe_score, window_start) AS \"QoE\", argMax(latency_score, window_start) AS \"Latencia\", argMax(resolution_score, window_start) AS \"Resolución\", argMax(saturation_score, window_start) AS \"Saturación\", argMax(sample_count, window_start) AS \"Muestras\" FROM sentinel_dns.dns_qoe_1m_latest WHERE $__timeFilter(window_start) AND site_id IN (${site:sqlstring}) AND zone_id IN (${zone:sqlstring}) AND calculation_version = ${calc_version:sqlstring} GROUP BY site_id, zone_id ORDER BY QoE ASC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "decimals": 1, "custom": { "align": "auto", "cellOptions": { "type": "auto" } } },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": "QoE|Latencia|Resolución|Saturación" },
+            "properties": [
+              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "gradient" } },
+              { "id": "min", "value": 0 },
+              { "id": "max", "value": 100 },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "red", "value": null },
+                    { "color": "orange", "value": 60 },
+                    { "color": "green", "value": 85 }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Muestras" },
+            "properties": [{ "id": "unit", "value": "short" }, { "id": "decimals", "value": 0 }]
+          }
+        ]
+      },
+      "options": { "showHeader": true, "sortBy": [{ "displayName": "QoE", "desc": false }] }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Causa principal",
+      "description": "Qué debe investigar el operador. La causa es el subscore más bajo; en ventanas sanas es solo la dimensión más débil.",
+      "gridPos": { "h": 10, "w": 10, "x": 14, "y": 24 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+          "editorType": "sql",
+          "format": 2,
+          "rawSql": "SELECT window_start AS \"Ventana\", concat(site_id, ' / ', zone_id) AS \"Zona\", status AS \"Estado\", primary_cause AS \"Causa\", round(qoe_score, 1) AS \"QoE\", sample_count AS \"Muestras\" FROM sentinel_dns.dns_qoe_1m_latest WHERE $__timeFilter(window_start) AND site_id IN (${site:sqlstring}) AND zone_id IN (${zone:sqlstring}) AND calculation_version = ${calc_version:sqlstring} AND status != 'good' ORDER BY Ventana DESC LIMIT 50"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" } } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Estado" },
+            "properties": [
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "critical": { "color": "red", "index": 0 },
+                      "warning": { "color": "orange", "index": 1 },
+                      "insufficient_data": { "color": "text", "index": 2 }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": { "showHeader": true, "sortBy": [{ "displayName": "Ventana", "desc": true }] }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Volumen de muestras",
+      "description": "Cuánta evidencia respalda cada score. Por debajo de 20 muestras la ventana se marca insufficient_data y no debe leerse como falla.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 34 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "sentinel-clickhouse" },
+          "editorType": "sql",
+          "format": 1,
+          "rawSql": "SELECT window_start AS time, concat(site_id, ' / ', zone_id) AS zona, sample_count FROM sentinel_dns.dns_qoe_1m_latest WHERE $__timeFilter(window_start) AND site_id IN (${site:sqlstring}) AND zone_id IN (${zone:sqlstring}) AND calculation_version = ${calc_version:sqlstring} ORDER BY time"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "partitionByValues",
+          "options": { "fields": ["zona"], "keepFields": false, "naming": { "asLabels": false } }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "thresholdsStyle": { "mode": "dashed" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 20 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    }
+  ]
+}
