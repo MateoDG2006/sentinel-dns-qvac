@@ -1,0 +1,93 @@
+<!--
+  Sentinel-DNS custom Wazuh rules (WBS B3).
+  Source: PLAN_IMPLEMENTACION_SENTINEL_DNS.md sec.10, rule IDs 100199-100221.
+  Rule IDs are fixed per the shared spec -- do not renumber without team
+  coordination.
+
+  ASSUMPTIONS -- confirmed against Wazuh's own JSON decoder docs
+  (https://documentation.wazuh.com/current/user-manual/ruleset/decoders/json-decoder.html),
+  but NOT yet verified specifically for events arriving via POST /events
+  as opposed to a traditional log/decoder pipeline. Verify with
+  wazuh-logtest (see below) before treating this as final:
+
+  1. A JSON event decodes with <decoded_as>json</decoded_as>, and nested
+     objects become dot-path dynamic fields (threat.type, dns.qname, etc.)
+     -- this is the confirmed general pattern for Wazuh's built-in JSON
+     decoder, not something specific to this endpoint that I've verified.
+
+  2. Operational alerts (100220, 100221) reuse WazuhThreatEvent's required
+     `threat` object with threat.type="none", carrying the real signal as
+     a string inside threat.reasons ("qvac_degraded", "outbox_backlog").
+     app/domain/schemas.py has no dedicated operational-event model as of
+     this writing -- this needs sign-off from whoever wires up QVAC-degraded
+     and outbox-backlog detection (likely A5/B4) before it's a real contract.
+
+  Targets a pre-5.0 Wazuh manager. See the flag raised alongside this file
+  about wazuh/wazuh#34848 (proposed removal of POST /events in 5.0).
+-->
+<!-- Sentinel-DNS custom rules (WBS B3). See docs/wazuh_rules_notes.md for design notes and open assumptions. -->
+<group name="sentinel_dns,">
+
+  <rule id="100199" level="0">
+    <decoded_as>sentinel_dns</decoded_as>
+    <field name="integration">^sentinel-dns$</field>
+    <description>Sentinel-DNS event</description>
+  </rule>
+
+  <rule id="100200" level="7">
+    <if_sid>100199</if_sid>
+    <field name="event_type">^dns_threat$</field>
+    <field name="threat.severity">^medium$</field>
+    <description>Sentinel-DNS: $(threat.type) amenaza medium en $(dns.qname) (sitio=$(site), zona=$(zone), confianza=$(threat.confidence))</description>
+    <group>sentinel_dns,dns_threat,</group>
+  </rule>
+
+  <rule id="100201" level="10">
+    <if_sid>100199</if_sid>
+    <field name="event_type">^dns_threat$</field>
+    <field name="threat.severity">^high$</field>
+    <description>Sentinel-DNS: $(threat.type) amenaza high en $(dns.qname) (sitio=$(site), zona=$(zone), confianza=$(threat.confidence))</description>
+    <group>sentinel_dns,dns_threat,</group>
+  </rule>
+
+  <rule id="100202" level="13">
+    <if_sid>100199</if_sid>
+    <field name="event_type">^dns_threat$</field>
+    <field name="threat.severity">^critical$</field>
+    <description>Sentinel-DNS: $(threat.type) amenaza critical en $(dns.qname) (sitio=$(site), zona=$(zone), confianza=$(threat.confidence))</description>
+    <group>sentinel_dns,dns_threat,</group>
+  </rule>
+
+  <rule id="100210" level="9">
+    <if_sid>100199</if_sid>
+    <field name="event_type">^dns_threat$</field>
+    <field name="threat.type">^dns_tunneling$</field>
+    <description>Sentinel-DNS: posible DNS tunneling en $(dns.qname) (sitio=$(site), zona=$(zone), confianza=$(threat.confidence))</description>
+    <group>sentinel_dns,dns_threat,dns_tunneling,</group>
+  </rule>
+
+  <rule id="100211" level="9">
+    <if_sid>100199</if_sid>
+    <field name="event_type">^dns_threat$</field>
+    <field name="threat.type">^beaconing$</field>
+    <description>Sentinel-DNS: posible beaconing/C2 en $(dns.qname) (sitio=$(site), zona=$(zone), confianza=$(threat.confidence))</description>
+    <group>sentinel_dns,dns_threat,beaconing,</group>
+  </rule>
+
+  <rule id="100220" level="6">
+    <if_sid>100199</if_sid>
+    <field name="event_type">^sentinel_operational$</field>
+    <field name="threat.reasons">qvac_degraded</field>
+    <description>Sentinel-DNS: QVAC degradado, operando en modo heuristico (sitio=$(site), zona=$(zone))</description>
+    <group>sentinel_dns,sentinel_operational,qvac_degraded,</group>
+  </rule>
+
+  <rule id="100221" level="8">
+    <if_sid>100199</if_sid>
+    <field name="event_type">^sentinel_operational$</field>
+    <field name="threat.reasons">outbox_backlog</field>
+    <description>Sentinel-DNS: outbox Wazuh acumulado por encima del umbral (sitio=$(site), zona=$(zone))</description>
+    <group>sentinel_dns,sentinel_operational,outbox_backlog,</group>
+  </rule>
+
+</group>

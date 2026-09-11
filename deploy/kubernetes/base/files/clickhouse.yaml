@@ -1,0 +1,31 @@
+# Datasource de ClickHouse para Grafana.
+#
+# Se aprovisiona solo al arrancar el contenedor: la demo no debe requerir
+# ningun clic de configuracion (spec seccion 21).
+#
+# El host y el puerto coinciden con los defaults de ClickHouseSettings en
+# app/core/config.py, y con el nombre del servicio en compose.yaml.
+
+apiVersion: 1
+
+datasources:
+  - name: ClickHouse
+    uid: sentinel-clickhouse
+    type: grafana-clickhouse-datasource
+    access: proxy
+    isDefault: true
+    # Aprovisionado por archivo: no se edita desde la interfaz, para que el
+    # dashboard sea reproducible desde un checkout limpio.
+    editable: false
+    jsonData:
+      host: clickhouse
+      port: 8123
+      protocol: http
+      secure: false
+      username: default
+      defaultDatabase: sentinel_dns
+      defaultTable: dns_qoe_1m_latest
+      tlsSkipVerify: false
+    # Sin password en el perfil local. En un entorno real se inyecta por
+    # secret; nunca se versiona.
+    secureJsonData: {}

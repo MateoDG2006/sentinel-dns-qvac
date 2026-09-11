@@ -1,0 +1,20 @@
+# Extra ConfigMaps that are not generated from repo files.
+# Features, brands, QoE thresholds, Grafana dashboards and Prometheus live in
+# kustomization.yaml configMapGenerator (no literals of secrets).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sentinel-runtime
+  labels:
+    app.kubernetes.io/part-of: sentinel-dns
+data:
+  # Initial resource notes belong next to workloads. Runtime env that is not
+  # secret stays here so overlays can patch keys without rewriting Deployments.
+  SENTINEL_KAFKA__BOOTSTRAP_SERVERS: "kafka:9092"
+  SENTINEL_CLICKHOUSE__HOST: "clickhouse"
+  SENTINEL_CLICKHOUSE__HTTP_PORT: "8123"
+  SENTINEL_WAZUH__BASE_URL: "https://wazuh-manager:55000"
+  SENTINEL_QVAC_CACHE_DIR: "/app/data/qvac"
+  SENTINEL_OUTBOX__PATH: "/app/data/outbox/sentinel.db"
+  SENTINEL_APP_HOST: "0.0.0.0"
+  SENTINEL_APP_PORT: "8000"

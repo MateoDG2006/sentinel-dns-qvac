@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: sentinel-dns
+resources:
+  - namespace.yaml
+  - storage.yaml
+  - configmaps.yaml
+  - services.yaml
+  - workloads.yaml
+  - network-policies.yaml
+generatorOptions:
+  disableNameSuffixHash: true
+# Files live under files/ because Kustomize LoadRestrictionsRootOnly forbids
+# reaching ../../config from this directory. tests/unit/test_validate_manifests.py
+# checks these copies stay identical to the Compose sources of truth.
+configMapGenerator:
+  - name: sentinel-config
+    files:
+      - features.yaml=files/features.yaml
+      - brands.yaml=files/brands.yaml
+      - qoe_thresholds.yaml=files/qoe_thresholds.yaml
+  - name: clickhouse-init
+    files:
+      - 001_qoe.sql=files/001_qoe.sql
+  - name: grafana-datasources
+    files:
+      - clickhouse.yaml=files/clickhouse.yaml
+  - name: grafana-dashboards
+    files:
+      - provider.yaml=files/provider.yaml
+      - sentinel-dns.json=files/sentinel-dns.json
+  - name: prometheus-config
+    files:
+      - prometheus.yml=files/prometheus.yml
+  - name: wazuh-rules
+    files:
+      - sentinel_dns_rules.xml=files/sentinel_dns_rules.xml
