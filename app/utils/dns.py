@@ -27,3 +27,18 @@ class Qname:
         if any(len(label) == 0 or len(label) > LABEL_MAX_LENGTH for label in labels):
             raise ValueError("qname label length is invalid")
         return punycode
+
+    @staticmethod
+    def split_labels(qname: str) -> list[str]:
+        return [label for label in qname.split(".") if label]
+
+    @staticmethod
+    def sld(qname: str) -> str:
+        labels = Qname.split_labels(qname)
+        if len(labels) >= 2:
+            return labels[-2]
+        return labels[0] if labels else ""
+
+    @staticmethod
+    def without_dots(qname: str) -> str:
+        return qname.replace(".", "")

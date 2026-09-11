@@ -726,6 +726,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "ruff" },
     { name = "testcontainers" },
+    { name = "types-pyyaml" },
 ]
 
 [package.metadata]
@@ -752,6 +753,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
     { name = "ruff", specifier = ">=0.6.0" },
     { name = "testcontainers", specifier = ">=4.8.0" },
+    { name = "types-pyyaml", specifier = ">=6.0.12" },
 ]
 
 [[package]]
@@ -795,6 +797,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/42/7c/5ba41a94d555b8693f07f4122bb354c0350a71f05860ed7ec6848439138a/tetherto_qvac_sdk-0.19.0.tar.gz", hash = "sha256:8d90d9904463c943c5212d742850204b3b8ba44df319f60115fa358d4f218a12", size = 239204, upload-time = "2026-09-07T11:56:35.583Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b9/32/f3da5f5166f25e312aa69bf1c7e029dcbde75b03a863449a5be7df11427d/tetherto_qvac_sdk-0.19.0-py3-none-any.whl", hash = "sha256:f1f5115d30e516f24f0c1e873cd6489c643404bd9907dc08ec1aba66220f96d8", size = 179290, upload-time = "2026-09-07T11:56:33.992Z" },
+]
+
+[[package]]
+name = "types-pyyaml"
+version = "6.0.12.20260906"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/90/6e/abec85b9013db5b934b0280a6dd104904d84f7bcbaab2e2f3def87ac7463/types_pyyaml-6.0.12.20260906.tar.gz", hash = "sha256:f59c1cc05010b833d2d72287bbaa72610106b28d42d89a907313117faba85212", size = 18649, upload-time = "2026-09-06T06:35:35.362Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/15/c0/fc0644b7ddcfb969e95845837143cb5173ddd6e06ee4ba5fc493cd9329b7/types_pyyaml-6.0.12.20260906-py3-none-any.whl", hash = "sha256:bca893ff0d51df5c9053137d5d0e6ccd36e939a196356f1d5c16372422f5137b", size = 21282, upload-time = "2026-09-06T06:35:34.372Z" },
 ]
 
 [[package]]
