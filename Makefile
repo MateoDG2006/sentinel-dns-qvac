@@ -14,7 +14,8 @@ API_HOST := 127.0.0.1
 API_PORT := 8000
 
 .PHONY: help env sync kafka up full wazuh down logs ps wait-kafka topics \
-	bootstrap qvac-smoke api dev check test fmt smoke validate-k8s
+	bootstrap qvac-smoke api dev check test fmt smoke validate-k8s \
+	ensure-wazuh-dir
 
 help:
 	$(info   make env            Copia .env.example a .env si no existe)
@@ -54,15 +55,26 @@ sync:
 	$(UV) sync
 	npm install
 
+ifeq ($(OS),Windows_NT)
+ensure-wazuh-dir:
+	powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path 'data/wazuh' | Out-Null"
+else
+ensure-wazuh-dir:
+	mkdir -p data/wazuh
+endif
+
 up: env
+	@$(MAKE) ensure-wazuh-dir
 	$(COMPOSE) --profile core up -d --build
 	@$(MAKE) wait-kafka
 
 full: env
+	@$(MAKE) ensure-wazuh-dir
 	$(COMPOSE) --profile full up -d --build
 	@$(MAKE) wait-kafka
 
 wazuh: env
+	@$(MAKE) ensure-wazuh-dir
 	$(COMPOSE) --profile security up -d
 	$(UV) run python scripts/bootstrap_wazuh.py
 

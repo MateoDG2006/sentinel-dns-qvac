@@ -31,6 +31,7 @@ from app.infrastructure.persistence.sqlite import SqliteOutbox
 from app.infrastructure.qvac.client import QvacClient
 from app.infrastructure.wazuh.client import WazuhClient
 from app.infrastructure.wazuh.dispatcher import WazuhOutboxDispatcher
+from app.infrastructure.wazuh.tls import WazuhTls
 from app.observability.metrics import SentinelMetrics
 from app.services.feature_extraction import FeatureExtractor
 from app.services.heuristics import HeuristicThreatDetector
@@ -107,12 +108,6 @@ class AppLifecycle:
         return True
 
     @staticmethod
-    def _wazuh_tls_verify(settings: WazuhSettings) -> bool | str:
-        if settings.ca_path is not None:
-            return str(settings.ca_path)
-        return settings.verify_tls
-
-    @staticmethod
     @asynccontextmanager
     async def run(app: FastAPI, settings: Settings) -> AsyncIterator[None]:
         log = logging.getLogger("app.core.lifecycle")
@@ -162,7 +157,7 @@ class AppLifecycle:
         ):
             wazuh_http = httpx.AsyncClient(
                 base_url=settings.wazuh.base_url,
-                verify=AppLifecycle._wazuh_tls_verify(settings.wazuh),
+                verify=WazuhTls.verify(settings.wazuh),
                 timeout=10.0,
             )
             dispatcher = WazuhOutboxDispatcher(

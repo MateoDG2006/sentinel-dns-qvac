@@ -184,17 +184,21 @@ services:
       - .env
     environment:
       SENTINEL_WAZUH__BASE_URL: https://wazuh-manager:55000
+      # Host .env uses a relative CA path that does not exist in the image.
+      SENTINEL_WAZUH__CA_PATH: /app/data/wazuh/root-ca.pem
       SENTINEL_QVAC_CACHE_DIR: /app/data/qvac
       SENTINEL_OUTBOX__PATH: /app/data/outbox/sentinel.db
     volumes:
       - ./data/qvac:/app/data/qvac:ro
+      - ./data/wazuh:/app/data/wazuh:ro
       - sentinel-outbox-data:/app/data/outbox
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8000/health/live >/dev/null 2>&1"]
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 20s
+      # QVAC loads a GGUF on first start; 20s made the API look unhealthy.
+      start_period: 90s
 
   wazuh-manager:
     image: wazuh/wazuh-manager:4.14.7

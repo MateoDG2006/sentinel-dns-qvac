@@ -13,7 +13,7 @@
 3. `make bootstrap` una vez (GGUF en `data/qvac/`); después `make qvac-smoke`.
 4. `make up` (perfil `core`) o `make full` (incluye Wazuh manager y el simulador).
 5. `make wazuh` — perfil `security`: manager en `:55000`, cert en `data/wazuh/root-ca.pem` y smoke `POST /events`.
-6. `make api` — fuerza Kafka `localhost:29092`, ClickHouse `localhost` y Wazuh `https://localhost:55000`.
+6. `make api` — fuerza Kafka `localhost:29092`, ClickHouse `localhost` y Wazuh `https://localhost:55000`. Compose `sentinel-api` monta el mismo cert en `/app/data/wazuh` y habla con `https://wazuh-manager:55000`.
 7. Lab: `http://127.0.0.1:8000/lab`. Simulador: `uv run python -m simulator.main --scenario mixed_demo --seed 42`.
 
 El proceso comparte un solo `PredictionService` para Kafka, webhook y lab:

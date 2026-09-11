@@ -1,10 +1,10 @@
 """Local Wazuh events API client. Implements domain.ports.WazuhEventPort.
 
 Expects an httpx.AsyncClient already constructed with base_url set to
-settings.base_url and verify configured from settings.verify_tls /
-settings.ca_path -- that wiring happens at app composition time
-(core/lifecycle.py), not here, since this module only sends requests,
-it doesn't own the client's lifecycle or TLS configuration.
+settings.base_url and verify configured by WazuhTls -- that wiring
+happens at app composition time (core/lifecycle.py), not here, since
+this module only sends requests, it doesn't own the client's lifecycle
+or TLS configuration.
 """
 
 from __future__ import annotations
