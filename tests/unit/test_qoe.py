@@ -380,3 +380,63 @@ def test_todas_las_tasas_y_scores_estan_en_rango(thresholds) -> None:
             ventana.qoe_score,
         ):
             assert 0.0 <= score <= 100.0
+
+
+# --- Muestras tardias -------------------------------------------------------
+
+
+def test_una_muestra_tardia_no_reemplaza_la_ventana_ya_entregada(thresholds) -> None:
+    """Sin esta proteccion, la tardia abriria una ventana nueva con la misma
+    clave y el ReplacingMergeTree reemplazaria la completa por la parcial."""
+    agregador = QoeAggregator(thresholds, window_seconds=60)
+    for muestra in healthy(30):
+        agregador.observe(muestra)
+    assert len(agregador.collect_due_windows(AFTER_WINDOW)) == 1
+
+    agregador.observe(sample(offset_s=30))  # llega tarde para la ventana de T0
+    assert agregador.pending_windows == 0
+    assert agregador.collect_due_windows(AFTER_WINDOW + timedelta(minutes=5)) == []
+    assert agregador.late_samples == 1
+
+
+def test_las_muestras_de_la_ventana_siguiente_se_aceptan(thresholds) -> None:
+    agregador = QoeAggregator(thresholds, window_seconds=60)
+    for muestra in healthy(30):
+        agregador.observe(muestra)
+    agregador.collect_due_windows(AFTER_WINDOW)
+
+    agregador.observe(sample(offset_s=90))  # ventana de T0+60, todavia no entregada
+    assert agregador.late_samples == 0
+    assert agregador.pending_windows == 1
+
+
+def test_una_muestra_anterior_a_la_ultima_entregada_tambien_es_tardia(thresholds) -> None:
+    agregador = QoeAggregator(thresholds, window_seconds=60)
+    agregador.observe(sample(offset_s=70))  # ventana de T0+60
+    agregador.collect_due_windows(T0 + timedelta(minutes=5))
+
+    agregador.observe(sample(offset_s=10))  # ventana de T0, mas vieja que la entregada
+    assert agregador.late_samples == 1
+    assert agregador.pending_windows == 0
+
+
+def test_la_proteccion_es_por_sitio_y_zona(thresholds) -> None:
+    agregador = QoeAggregator(thresholds, window_seconds=60)
+    for muestra in healthy(30, zone_id="zona-centro"):
+        agregador.observe(muestra)
+    agregador.collect_due_windows(AFTER_WINDOW)
+
+    # zona-sur nunca entrego su ventana de T0: su muestra no es tardia.
+    agregador.observe(sample(offset_s=30, zone_id="zona-sur"))
+    assert agregador.late_samples == 0
+    assert agregador.pending_windows == 1
+
+
+def test_flush_all_tambien_marca_las_ventanas_como_entregadas(thresholds) -> None:
+    agregador = QoeAggregator(thresholds, window_seconds=60)
+    for muestra in healthy(30):
+        agregador.observe(muestra)
+    agregador.flush_all(T0)
+
+    agregador.observe(sample(offset_s=30))
+    assert agregador.late_samples == 1

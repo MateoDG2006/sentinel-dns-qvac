@@ -250,6 +250,12 @@ class QoeAggregator:
 
     El agregador no escribe en ningun lado: devuelve ventanas cerradas y el
     llamador decide que hacer con ellas.
+
+    Muestras tardias: una vez que se entrego la ventana de un sitio y zona, las
+    muestras de esa ventana o de una anterior se descartan y se cuentan en
+    :attr:`late_samples`. Si se aceptaran, abririan una ventana nueva con la
+    misma clave y pocas muestras, y al escribirse el ReplacingMergeTree
+    reemplazaria la ventana completa por la parcial.
     """
 
     def __init__(
@@ -268,6 +274,9 @@ class QoeAggregator:
         self._calculation_version = calculation_version or thresholds.version
         self._grace = timedelta(seconds=grace_seconds)
         self._buckets: dict[WindowKey, list[QoeSample]] = defaultdict(list)
+        # Ultima ventana entregada por (sitio, zona): lo anterior ya es tardio.
+        self._last_emitted: dict[tuple[str, str], datetime] = {}
+        self._late_samples = 0
 
     # -- ingesta ------------------------------------------------------------
 
@@ -279,13 +288,28 @@ class QoeAggregator:
         return datetime.fromtimestamp(floored, tz=UTC)
 
     def observe(self, sample: QoeSample) -> None:
-        """Registra una muestra en su ventana correspondiente."""
-        key = (sample.site_id, sample.zone_id, self.window_start_for(sample.event_ts))
-        self._buckets[key].append(sample)
+        """Registra una muestra en su ventana, salvo que esa ventana ya se entrego."""
+        start = self.window_start_for(sample.event_ts)
+        emitted = self._last_emitted.get((sample.site_id, sample.zone_id))
+        if emitted is not None and start <= emitted:
+            self._late_samples += 1
+            return
+        self._buckets[(sample.site_id, sample.zone_id, start)].append(sample)
 
     @property
     def pending_windows(self) -> int:
         return len(self._buckets)
+
+    @property
+    def late_samples(self) -> int:
+        """Muestras descartadas por llegar despues de que su ventana se entrego."""
+        return self._late_samples
+
+    def _mark_emitted(self, keys: list[WindowKey]) -> None:
+        for site_id, zone_id, start in keys:
+            previous = self._last_emitted.get((site_id, zone_id))
+            if previous is None or start > previous:
+                self._last_emitted[(site_id, zone_id)] = start
 
     # -- cierre de ventanas -------------------------------------------------
 
@@ -296,8 +320,9 @@ class QoeAggregator:
         veces no produce duplicados.
         """
         now = now.astimezone(UTC)
-        due = [key for key in self._buckets if key[2] + self._window + self._grace <= now]
-        results = [self._build(key, self._buckets.pop(key), now) for key in sorted(due)]
+        due = sorted(key for key in self._buckets if key[2] + self._window + self._grace <= now)
+        results = [self._build(key, self._buckets.pop(key), now) for key in due]
+        self._mark_emitted(due)
         return results
 
     async def flush_due_windows(self, now: datetime) -> list[QoeWindowResult]:
@@ -307,7 +332,9 @@ class QoeAggregator:
     def flush_all(self, now: datetime) -> list[QoeWindowResult]:
         """Cierra todas las ventanas abiertas. Pensado para tests y apagado."""
         keys = sorted(self._buckets)
-        return [self._build(key, self._buckets.pop(key), now) for key in keys]
+        results = [self._build(key, self._buckets.pop(key), now) for key in keys]
+        self._mark_emitted(keys)
+        return results
 
     # -- calculo ------------------------------------------------------------
 
