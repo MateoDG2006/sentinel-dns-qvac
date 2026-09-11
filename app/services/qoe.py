@@ -309,9 +309,7 @@ class QoeAggregator:
 
     # -- calculo ------------------------------------------------------------
 
-    def _build(
-        self, key: WindowKey, samples: list[QoeSample], now: datetime
-    ) -> QoeWindowResult:
+    def _build(self, key: WindowKey, samples: list[QoeSample], now: datetime) -> QoeWindowResult:
         site_id, zone_id, window_start = key
         limits = self._thresholds.for_zone(zone_id)
         total = len(samples)
