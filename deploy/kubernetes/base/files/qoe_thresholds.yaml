@@ -1,0 +1,72 @@
+# Umbrales del score de calidad de experiencia (QoE).
+#
+# Fuente: PLAN_IMPLEMENTACION_SENTINEL_DNS.md seccion 9, "Formula QoE v1".
+# La spec exige que estos valores vivan en configuracion y no en el codigo.
+#
+# Cada metrica define dos puntos:
+#   good     -> la metrica en ese valor (o mejor) produce subscore 100
+#   critical -> la metrica en ese valor (o peor) produce subscore 0
+# Entre ambos la interpolacion es lineal.
+#
+# Consumido por app/services/qoe.py. La ruta la define
+# `SENTINEL_QOE_THRESHOLDS_PATH` en app/core/config.py.
+
+version: "1.0"
+
+# Pesos de la combinacion final. Deben sumar exactamente 1.0.
+weights:
+  latency: 0.45
+  resolution: 0.30
+  saturation: 0.25
+
+# Estados derivados del score final (0..100).
+#   good      -> qoe_score >= good_min
+#   warning   -> warning_min <= qoe_score < good_min
+#   critical  -> qoe_score < warning_min
+status:
+  good_min: 85.0
+  warning_min: 60.0
+
+# Ventanas con menos muestras que esto no se puntuan: se marcan como
+# `insufficient_data` y no deben pintarse como falla en Grafana.
+min_samples: 20
+
+# Umbrales por defecto, aplicados a toda zona sin override.
+defaults:
+  # Subscore de latencia: se calcula sobre el p95 de la ventana.
+  latency_p95_ms:
+    good: 100.0
+    critical: 500.0
+
+  # Subscore de resolucion: proporcion de NXDOMAIN sobre el total.
+  nxdomain_rate:
+    good: 0.02
+    critical: 0.20
+
+  # Subscore de saturacion: se toma la PEOR de las tres senales siguientes.
+  servfail_rate:
+    good: 0.005
+    critical: 0.10
+
+  timeout_rate:
+    good: 0.005
+    critical: 0.10
+
+  # Dispersion de la cola de latencia, medida como p99 / p50. Una zona sana
+  # tiene una cola cercana a la mediana; una saturada la tiene muy dispersa.
+  latency_dispersion:
+    good: 2.0
+    critical: 8.0
+
+# Overrides por zona. Solo hace falta declarar las metricas que difieren del
+# default; el resto se hereda. Ejemplo de la forma esperada:
+#
+# zones:
+#   zona-sur:
+#     latency_p95_ms:
+#       good: 150.0
+#       critical: 600.0
+#
+# Vacio a proposito: los defaults son adecuados para las cuatro zonas
+# sinteticas actuales. Ajustar solo con evidencia de la linea base.
+zones: {}

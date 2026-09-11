@@ -1,0 +1,97 @@
+version: "1.0"
+suspicious_qtypes:
+  - "TXT"
+  - "NULL"
+  - "ANY"
+  - "AXFR"
+  - "IXFR"
+nxdomain_rcode: NXDOMAIN
+resolver_error_rcodes:
+  - SERVFAIL
+  - REFUSED
+  - FORMERR
+  - NOTIMP
+  - TIMEOUT
+homoglyphs:
+  substitutions:
+    "0": "o"
+    "1": "l"
+    "3": "e"
+    "4": "a"
+    "5": "s"
+    "7": "t"
+    "8": "b"
+  sequences:
+    rn: "m"
+    vv: "w"
+    cl: "d"
+dga:
+  entropy_min: 3.6
+  sld_length_min: 14
+  vowel_ratio_max: 0.30
+  digit_ratio_min: 0.15
+  longest_label_max: 32
+  label_count_max: 4
+  score_threshold: 0.55
+  weights:
+    entropy: 0.40
+    length: 0.30
+    vowels: 0.20
+    digits: 0.10
+typosquatting:
+  max_distance: 2
+  score_threshold: 0.50
+  deceptive_prefixes:
+    - login
+    - secure
+    - verify
+    - account
+    - support
+    - auth
+    - update
+    - confirm
+    - billing
+    - webmail
+    - signin
+  deceptive_suffixes:
+    - login
+    - secure
+    - verify
+    - account
+    - support
+    - online
+    - portal
+    - sso
+    - auth
+    - update
+    - confirm
+  weights:
+    distance: 0.55
+    homoglyph: 0.25
+    affix: 0.20
+tunneling:
+  longest_label_min: 36
+  uniqueness_min: 0.65
+  query_rate_min: 20
+  entropy_min: 3.5
+  score_threshold: 0.55
+  weights:
+    long_label: 0.30
+    uniqueness: 0.25
+    query_rate: 0.20
+    entropy: 0.15
+    txt: 0.10
+beaconing:
+  query_count_min: 8
+  jitter_ratio_max: 0.12
+  interval_min_ms: 4000
+  interval_max_ms: 180000
+  score_threshold: 0.70
+  weights:
+    periodicity: 0.40
+    low_jitter: 0.40
+    volume: 0.20
+severity:
+  medium_min: 0.45
+  high_min: 0.70
+  critical_min: 0.90

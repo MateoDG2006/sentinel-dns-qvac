@@ -1,0 +1,715 @@
+# Workloads for the declarative local overlay (ADR-010).
+# Requests/limits below are initial values for validation, not production sizing.
+# Kafka, ClickHouse and Wazuh should be replaced by institutional operators
+# outside the MVP. Images are pinned; no :latest. privileged is false.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  labels:
+    app.kubernetes.io/name: kafka
+spec:
+  serviceName: kafka
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: kafka
+          image: apache/kafka:3.8.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: plaintext
+              containerPort: 9092
+            - name: controller
+              containerPort: 9093
+          env:
+            - name: CLUSTER_ID
+              value: MkU3OEVBNTcwNTJENDM2Qk
+            - name: KAFKA_NODE_ID
+              value: "1"
+            - name: KAFKA_PROCESS_ROLES
+              value: broker,controller
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: 1@kafka:9093
+            - name: KAFKA_LISTENERS
+              value: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: PLAINTEXT://kafka:9092
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: CONTROLLER
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: PLAINTEXT
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            - name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS
+              value: "0"
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "false"
+            - name: KAFKA_LOG_DIRS
+              value: /var/lib/kafka/data
+          # Initial values for the local overlay.
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1536Mi
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /var/lib/kafka/data
+          livenessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      volumes:
+        - name: kafka-data
+          persistentVolumeClaim:
+            claimName: kafka-data
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-init
+  labels:
+    app.kubernetes.io/name: kafka-init
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: kafka-init
+          image: apache/kafka:3.8.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop: ["ALL"]
+          # Initial values for the local overlay.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              crear() {
+                /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 \
+                  --create --if-not-exists --topic "$1" --partitions "$2" --replication-factor 1
+              }
+              crear dns.telemetry.normalized 3
+              crear sentinel.dns.dlq 1
+              crear sentinel.dns.groundtruth 1
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+  labels:
+    app.kubernetes.io/name: clickhouse
+spec:
+  serviceName: clickhouse
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: clickhouse
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: clickhouse
+    spec:
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:24.8.14.39-alpine
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: 8123
+          env:
+            - name: CLICKHOUSE_SKIP_USER_SETUP
+              value: "1"
+          # Initial values for the local overlay.
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: clickhouse-data
+              mountPath: /var/lib/clickhouse
+            - name: clickhouse-init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: clickhouse-data
+          persistentVolumeClaim:
+            claimName: clickhouse-data
+        - name: clickhouse-init
+          configMap:
+            name: clickhouse-init
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  labels:
+    app.kubernetes.io/name: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: sentinel-dns/grafana:11.2.0-ch4.14.0
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: Viewer
+            - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
+              value: /etc/grafana/provisioning/dashboards/sentinel-dns.json
+            - name: GF_ANALYTICS_REPORTING_ENABLED
+              value: "false"
+            - name: GF_ANALYTICS_CHECK_FOR_UPDATES
+              value: "false"
+            - name: GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES
+              value: "false"
+            - name: GF_NEWS_NEWS_FEED_ENABLED
+              value: "false"
+            - name: GF_PLUGINS_PREINSTALL_DISABLED
+              value: "true"
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sentinel-credentials
+                  key: grafana_admin_password
+                  optional: true
+          # Initial values for the local overlay.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: grafana-data
+              mountPath: /var/lib/grafana
+            - name: grafana-datasources
+              mountPath: /etc/grafana/provisioning/datasources
+              readOnly: true
+            - name: grafana-dashboards
+              mountPath: /etc/grafana/provisioning/dashboards
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: grafana-data
+          persistentVolumeClaim:
+            claimName: grafana-data
+        - name: grafana-datasources
+          configMap:
+            name: grafana-datasources
+        - name: grafana-dashboards
+          configMap:
+            name: grafana-dashboards
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  labels:
+    app.kubernetes.io/name: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.55.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop: ["ALL"]
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+          ports:
+            - name: http
+              containerPort: 9090
+          # Initial values for the local overlay.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          volumeMounts:
+            - name: prometheus-config
+              mountPath: /etc/prometheus/prometheus.yml
+              subPath: prometheus.yml
+              readOnly: true
+            - name: prometheus-data
+              mountPath: /prometheus
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: prometheus-config
+          configMap:
+            name: prometheus-config
+        - name: prometheus-data
+          persistentVolumeClaim:
+            claimName: prometheus-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentinel-api
+  labels:
+    app.kubernetes.io/name: sentinel-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sentinel-api
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sentinel-api
+    spec:
+      containers:
+        - name: sentinel-api
+          image: sentinel-dns/api:0.1.0
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: sentinel-runtime
+          env:
+            - name: SENTINEL_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: sentinel-credentials
+                  key: webhook_token
+                  optional: true
+            - name: SENTINEL_WAZUH__USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: sentinel-credentials
+                  key: wazuh_username
+                  optional: true
+            - name: SENTINEL_WAZUH__PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sentinel-credentials
+                  key: wazuh_password
+                  optional: true
+          # Initial values for the local overlay.
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: sentinel-config
+              mountPath: /app/config
+              readOnly: true
+            - name: qvac-models
+              mountPath: /app/data/qvac
+              readOnly: true
+            - name: sentinel-outbox
+              mountPath: /app/data/outbox
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      volumes:
+        - name: sentinel-config
+          configMap:
+            name: sentinel-config
+        - name: qvac-models
+          persistentVolumeClaim:
+            claimName: qvac-models
+        - name: sentinel-outbox
+          persistentVolumeClaim:
+            claimName: sentinel-outbox
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: synthetic-producer
+  labels:
+    app.kubernetes.io/name: synthetic-producer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: synthetic-producer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: synthetic-producer
+    spec:
+      containers:
+        - name: synthetic-producer
+          image: sentinel-dns/api:0.1.0
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop: ["ALL"]
+          command:
+            - uv
+            - run
+            - python
+            - -m
+            - simulator.main
+            - --scenario
+            - mixed_demo
+            - --bootstrap
+            - kafka:9092
+            - --rate
+            - "5"
+          # Initial values for the local overlay.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command: ["true"]
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command: ["true"]
+            periodSeconds: 15
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wazuh-manager
+  labels:
+    app.kubernetes.io/name: wazuh-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wazuh-manager
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wazuh-manager
+    spec:
+      containers:
+        - name: wazuh-manager
+          image: wazuh/wazuh-manager:4.14.7
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+          ports:
+            - name: api
+              containerPort: 55000
+          env:
+            - name: INDEXER_URL
+              value: https://wazuh-indexer:9200
+            - name: INDEXER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: sentinel-credentials
+                  key: wazuh_indexer_username
+                  optional: true
+            - name: INDEXER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sentinel-credentials
+                  key: wazuh_indexer_password
+                  optional: true
+            - name: API_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: sentinel-credentials
+                  key: wazuh_api_username
+                  optional: true
+            - name: API_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sentinel-credentials
+                  key: wazuh_api_password
+                  optional: true
+          # Initial values for the local overlay.
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: wazuh-manager-data
+              mountPath: /var/ossec/data
+            - name: wazuh-rules
+              mountPath: /var/ossec/etc/rules/sentinel_dns_rules.xml
+              subPath: sentinel_dns_rules.xml
+              readOnly: true
+          livenessProbe:
+            tcpSocket:
+              port: 55000
+            initialDelaySeconds: 40
+            periodSeconds: 20
+          readinessProbe:
+            tcpSocket:
+              port: 55000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+      volumes:
+        - name: wazuh-manager-data
+          persistentVolumeClaim:
+            claimName: wazuh-manager-data
+        - name: wazuh-rules
+          configMap:
+            name: wazuh-rules
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: wazuh-indexer
+  labels:
+    app.kubernetes.io/name: wazuh-indexer
+spec:
+  serviceName: wazuh-indexer
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wazuh-indexer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wazuh-indexer
+    spec:
+      containers:
+        - name: wazuh-indexer
+          image: wazuh/wazuh-indexer:4.14.7
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+          ports:
+            - name: https
+              containerPort: 9200
+          env:
+            - name: OPENSEARCH_JAVA_OPTS
+              value: "-Xms512m -Xmx512m"
+          # Initial values for the local overlay.
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: wazuh-indexer-data
+              mountPath: /var/lib/wazuh-indexer
+          livenessProbe:
+            tcpSocket:
+              port: 9200
+            initialDelaySeconds: 40
+            periodSeconds: 20
+          readinessProbe:
+            tcpSocket:
+              port: 9200
+            initialDelaySeconds: 20
+            periodSeconds: 15
+      volumes:
+        - name: wazuh-indexer-data
+          persistentVolumeClaim:
+            claimName: wazuh-indexer-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wazuh-dashboard
+  labels:
+    app.kubernetes.io/name: wazuh-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wazuh-dashboard
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wazuh-dashboard
+    spec:
+      containers:
+        - name: wazuh-dashboard
+          image: wazuh/wazuh-dashboard:4.14.7
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+          ports:
+            - name: https
+              containerPort: 5601
+          env:
+            - name: INDEXER_URL
+              value: https://wazuh-indexer:9200
+            - name: INDEXER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: sentinel-credentials
+                  key: wazuh_indexer_username
+                  optional: true
+            - name: INDEXER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sentinel-credentials
+                  key: wazuh_indexer_password
+                  optional: true
+            - name: WAZUH_API_URL
+              value: https://wazuh-manager:55000
+          # Initial values for the local overlay.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          livenessProbe:
+            tcpSocket:
+              port: 5601
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          readinessProbe:
+            tcpSocket:
+              port: 5601
+            initialDelaySeconds: 20
+            periodSeconds: 15

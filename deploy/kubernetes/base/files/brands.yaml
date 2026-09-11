@@ -1,0 +1,11 @@
+version: "1.0"
+# Fictional/authorized brands for the hackathon. Do not add real customer names.
+brands:
+  - acmebank
+  - northwind
+  - globexmail
+  - initechvpn
+  - soylentcorp
+  - hoolicloud
+  - initrode
+  - rivercity
