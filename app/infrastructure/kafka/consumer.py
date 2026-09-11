@@ -20,6 +20,12 @@ from aiokafka import (  # type: ignore[import-untyped]
 )
 from pydantic import ValidationError
 
+from app.constants.health import (
+    KAFKA_CONNECTING_DETAIL,
+    KAFKA_DEPENDENCY_NAME,
+    KAFKA_STOPPED_DETAIL,
+    KAFKA_UNAVAILABLE_DETAIL,
+)
 from app.constants.kafka import (
     BACKPRESSURE_PAUSE_SECONDS,
     DLQ_REASON_HEADER,
@@ -27,10 +33,10 @@ from app.constants.kafka import (
     TOPIC_NORMALIZED,
 )
 from app.core.config import Settings
-from app.domain.enums import EventSource
+from app.domain.enums import DependencyStatus, EventSource
 from app.domain.errors import KafkaBackpressureError
 from app.domain.ports import BatchHandler
-from app.domain.schemas import NormalizedDnsEvent
+from app.domain.schemas import DependencyHealth, NormalizedDnsEvent
 from app.observability.metrics import SentinelMetrics
 from app.utils.time import UtcDateTime
 
@@ -76,6 +82,8 @@ class KafkaDnsConsumer:
         self._consumer: AIOKafkaConsumer | None = None
         self._producer: AIOKafkaProducer | None = None
         self._stopped = False
+        self._started = False
+        self._failure: str | None = None
 
     async def run(self, handler: BatchHandler) -> None:
         self._handler = handler
@@ -96,6 +104,8 @@ class KafkaDnsConsumer:
         )
         await self._producer.start()
         await self._consumer.start()
+        self._started = True
+        self._failure = None
         if self._dlq is None:
             self._dlq = KafkaDlqPublisher(self._producer, topic=kafka.topic_dlq)
         self._log.info(
@@ -127,6 +137,40 @@ class KafkaDnsConsumer:
                 await self._consumer.commit()
         finally:
             await self.stop()
+
+    def mark_unavailable(self, reason: str) -> None:
+        self._started = False
+        self._failure = reason or KAFKA_UNAVAILABLE_DETAIL
+
+    async def health(self) -> DependencyHealth:
+        checked_at = UtcDateTime.ensure(datetime.now(UTC))
+        if self._failure is not None:
+            return DependencyHealth(
+                name=KAFKA_DEPENDENCY_NAME,
+                status=DependencyStatus.DOWN,
+                detail=self._failure,
+                checked_at=checked_at,
+            )
+        if self._started and self._consumer is not None:
+            return DependencyHealth(
+                name=KAFKA_DEPENDENCY_NAME,
+                status=DependencyStatus.UP,
+                detail=None,
+                checked_at=checked_at,
+            )
+        if self._stopped:
+            return DependencyHealth(
+                name=KAFKA_DEPENDENCY_NAME,
+                status=DependencyStatus.DOWN,
+                detail=KAFKA_STOPPED_DETAIL,
+                checked_at=checked_at,
+            )
+        return DependencyHealth(
+            name=KAFKA_DEPENDENCY_NAME,
+            status=DependencyStatus.DEGRADED,
+            detail=KAFKA_CONNECTING_DETAIL,
+            checked_at=checked_at,
+        )
 
     async def stop(self) -> None:
         self._stopped = True

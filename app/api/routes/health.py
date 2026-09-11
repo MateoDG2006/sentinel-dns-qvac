@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.dependencies import ApiDependencies
 from app.constants.api import HEALTH_LIVE_PATH, HEALTH_READY_PATH
+from app.core.lifecycle import AppLifecycle
 from app.domain.enums import ServiceState
 from app.observability.health import HealthProbe
 
@@ -33,7 +34,13 @@ class HealthApi:
             ServiceState,
             getattr(request.app.state, "service_state", ServiceState.READY),
         )
-        status_code, body = probe.readiness(service_state=service_state)
+        status_code, body = await probe.readiness(
+            service_state=service_state,
+            qvac=getattr(request.app.state, "qvac_client", None),
+            kafka=getattr(request.app.state, "kafka_consumer", None),
+            outbox=getattr(request.app.state, "outbox", None),
+            kafka_enabled=AppLifecycle.kafka_consumer_enabled(),
+        )
         return JSONResponse(status_code=status_code, content=body)
 
 
@@ -47,5 +54,5 @@ HealthApi.router.add_api_route(
     HEALTH_READY_PATH,
     HealthApi.ready,
     methods=["GET"],
-    summary="Readiness: config lista; QVAC/Kafka degradados no fuerzan 503",
+    summary="Readiness: config y Kafka listos; QVAC degradado no fuerza 503",
 )

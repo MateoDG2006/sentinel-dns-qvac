@@ -10,9 +10,11 @@ from uuid import uuid4
 import pytest
 from aiokafka import TopicPartition
 
+from app.constants.health import KAFKA_CONNECTING_DETAIL
 from app.constants.kafka import TOPIC_DLQ, TOPIC_NORMALIZED
 from app.core.config import Settings
 from app.core.lifecycle import AppLifecycle
+from app.domain.enums import DependencyStatus
 from app.domain.errors import KafkaBackpressureError
 from app.domain.schemas import NormalizedDnsEvent
 from app.infrastructure.kafka.consumer import KafkaDnsConsumer
@@ -144,3 +146,10 @@ def test_unit_tests_disable_kafka_consumer(monkeypatch: pytest.MonkeyPatch) -> N
     assert AppLifecycle.kafka_consumer_enabled() is False
     monkeypatch.setenv("SENTINEL_ENABLE_KAFKA_CONSUMER", "1")
     assert AppLifecycle.kafka_consumer_enabled() is True
+
+
+async def test_kafka_health_is_connecting_before_broker() -> None:
+    consumer = KafkaDnsConsumer(Settings())
+    health = await consumer.health()
+    assert health.status is DependencyStatus.DEGRADED
+    assert health.detail == KAFKA_CONNECTING_DETAIL

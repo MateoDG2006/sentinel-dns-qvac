@@ -133,5 +133,6 @@ class AppLifecycle:
             await consumer.run(handler)
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as exc:
+            consumer.mark_unavailable(type(exc).__name__)
             metrics.set_kafka_consumer_lag(-1)

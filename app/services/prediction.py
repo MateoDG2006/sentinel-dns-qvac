@@ -8,9 +8,11 @@ from statistics import mean, pstdev
 from typing import Protocol
 from uuid import UUID, uuid5
 
+from app.constants.health import OUTBOX_DEPENDENCY_NAME, OUTBOX_VOLATILE_DETAIL
 from app.constants.prediction import PREDICTION_ID_NAMESPACE
 from app.core.config import Settings
 from app.domain.enums import (
+    DependencyStatus,
     DetectorRuntime,
     EventSource,
     OutboxStatus,
@@ -21,6 +23,7 @@ from app.domain.enums import (
 from app.domain.errors import KafkaBackpressureError, OutboxFullError
 from app.domain.ports import OutboxPort
 from app.domain.schemas import (
+    DependencyHealth,
     DnsFeatures,
     HeuristicVerdict,
     NormalizedDnsEvent,
@@ -160,6 +163,14 @@ class VolatileOutbox:
 
     def payloads(self) -> list[OutboxRecord]:
         return list(self._records.values())
+
+    async def health(self) -> DependencyHealth:
+        return DependencyHealth(
+            name=OUTBOX_DEPENDENCY_NAME,
+            status=DependencyStatus.DEGRADED,
+            detail=OUTBOX_VOLATILE_DETAIL,
+            checked_at=UtcDateTime.ensure(datetime.now(UTC)),
+        )
 
 
 class PredictionService:
