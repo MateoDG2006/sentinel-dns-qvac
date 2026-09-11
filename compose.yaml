@@ -233,7 +233,10 @@ services:
         condition: service_healthy
       sentinel-api:
         condition: service_healthy
-    command: ["uv", "run", "python", "-m", "simulator.main", "--scenario", "mixed_demo", "--bootstrap", "kafka:9092", "--rate", "5", "--duration", "120"]
+    # Sin --duration: mixed_demo usa sus 480 s por defecto, 60 s por escenario.
+    # Con menos, cada escenario dura muy poco y beaconing no llega a juntar las
+    # 8 consultas que exige config/features.yaml: la demo no lo detectaria.
+    command: ["uv", "run", "python", "-m", "simulator.main", "--scenario", "mixed_demo", "--bootstrap", "kafka:9092", "--rate", "5"]
 
 networks:
   sentinel-net:
