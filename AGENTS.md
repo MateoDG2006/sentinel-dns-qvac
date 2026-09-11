@@ -56,6 +56,7 @@ No crear commits, ramas, PR, publicaciones ni despliegues externos salvo solicit
 - Logs JSON con allowlist; nunca prompts completos, secretos o cuerpos DNS innecesarios.
 - Métricas sin `qname`, `client_hash`, `site_id` o `zone_id` como labels.
 - Tests deterministas con seed fija.
+- Constantes en `app/constants/<tipo>.py`; funciones sueltas encapsuladas en una clase del módulo o en `app/utils/<tipo>.py`.
 - No declarar éxito con tests fallando ni ocultar verificaciones no ejecutadas.
 
 ## Comandos previstos
