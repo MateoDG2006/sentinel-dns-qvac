@@ -35,8 +35,54 @@ from app.observability.metrics import SentinelMetrics
 from app.services.feature_extraction import FeatureExtractor
 from app.services.heuristics import HeuristicThreatDetector
 from app.services.prediction import PredictionService, QoeSink
-from app.services.qoe import DnsQoeSink, QoeAggregator, load_thresholds
+from app.services.qoe import DnsQoeSink, QoeAggregator, QoeWindowResult, load_thresholds
 from app.services.qvac_enrichment import QvacEnrichmentService
+
+
+class QoeFlushWorker:
+    """Flush closed QoE windows without dropping them if ClickHouse rejects the write."""
+
+    def __init__(
+        self,
+        aggregator: QoeAggregator,
+        repository: ClickHouseQoeRepository,
+        metrics: SentinelMetrics,
+    ) -> None:
+        self._aggregator = aggregator
+        self._repository = repository
+        self._metrics = metrics
+        self._pending: list[QoeWindowResult] = []
+
+    @property
+    def pending_count(self) -> int:
+        return len(self._pending)
+
+    async def run(self) -> None:
+        while True:
+            await asyncio.sleep(QOE_FLUSH_POLL_SECONDS)
+            await self.tick(datetime.now(UTC))
+
+    async def tick(self, now: datetime) -> None:
+        log = logging.getLogger("app.core.lifecycle")
+        try:
+            state = await self._repository.health()
+            if not state.healthy:
+                self._metrics.increment_qoe_flush(status="unavailable")
+                return
+            self._pending.extend(self._aggregator.collect_due_windows(now))
+            if not self._pending:
+                return
+            await self._repository.upsert_windows(self._pending)
+            self._metrics.increment_qoe_flush(status="ok", amount=len(self._pending))
+            self._pending.clear()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log.warning(
+                "qoe flush failed",
+                extra={"event": "qoe_flush_failed", "error_code": type(exc).__name__},
+            )
+            self._metrics.increment_qoe_flush(status="error")
 
 
 class AppLifecycle:
@@ -273,28 +319,7 @@ class AppLifecycle:
         repository: ClickHouseQoeRepository,
         metrics: SentinelMetrics,
     ) -> None:
-        log = logging.getLogger("app.core.lifecycle")
-        while True:
-            await asyncio.sleep(QOE_FLUSH_POLL_SECONDS)
-            now = datetime.now(UTC)
-            try:
-                state = await repository.health()
-                if not state.healthy:
-                    metrics.increment_qoe_flush(status="unavailable")
-                    continue
-                windows = aggregator.collect_due_windows(now)
-                if not windows:
-                    continue
-                await repository.upsert_windows(windows)
-                metrics.increment_qoe_flush(status="ok", amount=len(windows))
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                log.warning(
-                    "qoe flush failed",
-                    extra={"event": "qoe_flush_failed", "error_code": type(exc).__name__},
-                )
-                metrics.increment_qoe_flush(status="error")
+        await QoeFlushWorker(aggregator, repository, metrics).run()
 
     @staticmethod
     async def _run_outbox_gauge(outbox: OutboxPort, metrics: SentinelMetrics) -> None:
