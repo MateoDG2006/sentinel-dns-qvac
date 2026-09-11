@@ -1,12 +1,19 @@
 # Stack local de Sentinel-DNS.
 #
-# Alcance actual (tarea C1): Compose minimo con Kafka en modo KRaft de un nodo y
-# creacion de los topics congelados. Los servicios de ClickHouse, Grafana,
-# Prometheus y Wazuh se agregan en C3/C4 segun la spec seccion 16.
+# Alcance actual: Kafka (C1) y la parte de QoE (C3): ClickHouse y Grafana.
+# Prometheus, Wazuh, sentinel-api y los perfiles core/security/demo/full se
+# agregan en C4 segun la spec seccion 16.
 #
 # Los nombres de servicio y puertos deben coincidir con los defaults de
-# app/core/config.py: el broker se llama `kafka` y escucha en 9092 dentro de la
-# red interna (SENTINEL_KAFKA__BOOTSTRAP_SERVERS=kafka:9092).
+# app/core/config.py y de deploy/grafana/provisioning:
+#   kafka:9092       SENTINEL_KAFKA__BOOTSTRAP_SERVERS
+#   clickhouse:8123  SENTINEL_CLICKHOUSE__HOST / HTTP_PORT y el datasource
+#
+# Todos los puertos publicados escuchan solo en loopback (spec seccion 5).
+#
+# Grafana usa una imagen propia con el plugin de ClickHouse ya incorporado:
+# la primera vez hace falta `docker compose build`, con Internet. Despues todo
+# el stack arranca sin salida a Internet (spec seccion 13).
 
 name: sentinel-dns
 
@@ -72,6 +79,76 @@ services:
         echo "--- topics disponibles ---"
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
 
+  # Almacen de ventanas QoE. El esquema se crea solo en el primer arranque:
+  # deploy/clickhouse/init/*.sql se monta en el entrypoint de inicializacion.
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8.14.39-alpine
+    container_name: sentinel-clickhouse
+    restart: unless-stopped
+    networks: [sentinel-net]
+    ports:
+      # Solo loopback: tests de integracion y procesos que corren en el host.
+      - "127.0.0.1:8123:8123"
+    environment:
+      # Perfil local: usuario `default` sin password, alcanzable solo desde la
+      # red interna y loopback. Un entorno real inyecta credenciales por secret
+      # (SENTINEL_CLICKHOUSE__USERNAME_FILE / PASSWORD_FILE).
+      CLICKHOUSE_SKIP_USER_SETUP: "1"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./deploy/clickhouse/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # Sano recien cuando la tabla existe: Grafana y el agente no arrancan
+      # contra un esquema a medio crear.
+      test:
+        - CMD-SHELL
+        - test "$$(clickhouse-client --query 'EXISTS TABLE sentinel_dns.dns_qoe_1m')" = "1"
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+
+  grafana:
+    build:
+      context: .
+      dockerfile: deploy/docker/grafana.Dockerfile
+    image: sentinel-dns/grafana:11.2.0-ch4.14.0
+    container_name: sentinel-grafana
+    restart: unless-stopped
+    networks: [sentinel-net]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      # La demo se ve sin iniciar sesion y abre directo en el dashboard. El
+      # rol anonimo es Viewer: no permite editar nada.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/sentinel-dns.json
+      # Sin telemetria ni llamadas salientes (AGENTS.md, regla 2).
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -qO- http://127.0.0.1:3000/api/health | grep -q 'database.*ok'
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
 networks:
   sentinel-net:
     name: sentinel-net
@@ -80,3 +157,7 @@ networks:
 volumes:
   kafka-data:
     name: sentinel-kafka-data
+  clickhouse-data:
+    name: sentinel-clickhouse-data
+  grafana-data:
+    name: sentinel-grafana-data
