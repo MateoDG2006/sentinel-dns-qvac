@@ -31,9 +31,28 @@ SYNTHETIC_TLDS: tuple[str, ...] = ("test", "example", "invalid", "lab", "demo")
 
 # Etiquetas neutras y pronunciables para dominios de aspecto normal.
 COMMON_LABELS: tuple[str, ...] = (
-    "portal", "cuenta", "tienda", "correo", "pagos", "soporte", "noticias",
-    "video", "musica", "clima", "mapa", "buscar", "nube", "agenda", "chat",
-    "panel", "acceso", "ayuda", "blog", "foro", "descargas", "estado",
+    "portal",
+    "cuenta",
+    "tienda",
+    "correo",
+    "pagos",
+    "soporte",
+    "noticias",
+    "video",
+    "musica",
+    "clima",
+    "mapa",
+    "buscar",
+    "nube",
+    "agenda",
+    "chat",
+    "panel",
+    "acceso",
+    "ayuda",
+    "blog",
+    "foro",
+    "descargas",
+    "estado",
 )
 
 # Marcas ficticias autorizadas para generar typosquatting.
@@ -44,14 +63,26 @@ COMMON_LABELS: tuple[str, ...] = (
 # variantes que el detector no reconoce. Copiada de esa fuente de verdad;
 # reemplazar por lectura del YAML cuando A3 este en main.
 FICTIONAL_BRANDS: tuple[str, ...] = (
-    "acmebank", "northwind", "globexmail", "initechvpn",
-    "soylentcorp", "hoolicloud", "initrode", "rivercity",
+    "acmebank",
+    "northwind",
+    "globexmail",
+    "initechvpn",
+    "soylentcorp",
+    "hoolicloud",
+    "initrode",
+    "rivercity",
 )
 
 # Sustituciones letra -> digito. Es la inversa del mapa `homoglyphs.substitutions`
 # de `config/features.yaml`, que normaliza en sentido digito -> letra.
 _HOMOGLYPHS: dict[str, str] = {
-    "o": "0", "l": "1", "e": "3", "a": "4", "s": "5", "t": "7", "b": "8",
+    "o": "0",
+    "l": "1",
+    "e": "3",
+    "a": "4",
+    "s": "5",
+    "t": "7",
+    "b": "8",
 }
 
 # Secuencias visualmente confundibles, inversa de `homoglyphs.sequences`.
@@ -59,12 +90,30 @@ _HOMOGLYPH_SEQUENCES: dict[str, str] = {"m": "rn", "w": "vv", "d": "cl"}
 
 # Afijos enganosos declarados en `config/features.yaml` (typosquatting).
 _DECEPTIVE_PREFIXES: tuple[str, ...] = (
-    "login", "secure", "verify", "account", "support",
-    "auth", "update", "confirm", "billing", "webmail", "signin",
+    "login",
+    "secure",
+    "verify",
+    "account",
+    "support",
+    "auth",
+    "update",
+    "confirm",
+    "billing",
+    "webmail",
+    "signin",
 )
 _DECEPTIVE_SUFFIXES: tuple[str, ...] = (
-    "login", "secure", "verify", "account", "support",
-    "online", "portal", "sso", "auth", "update", "confirm",
+    "login",
+    "secure",
+    "verify",
+    "account",
+    "support",
+    "online",
+    "portal",
+    "sso",
+    "auth",
+    "update",
+    "confirm",
 )
 _CONSONANTS = "bcdfghjklmnpqrstvwxyz"
 _VOWELS = "aeiou"
@@ -117,8 +166,14 @@ def typosquat_domain(rng: random.Random, brand: str | None = None) -> TypoDomain
     """
     target = brand if brand is not None else rng.choice(FICTIONAL_BRANDS)
     techniques = (
-        "insert", "delete", "transpose", "substitute",
-        "homoglyph", "sequence", "prefix", "suffix",
+        "insert",
+        "delete",
+        "transpose",
+        "substitute",
+        "homoglyph",
+        "sequence",
+        "prefix",
+        "suffix",
     )
 
     for technique in rng.sample(techniques, k=len(techniques)):

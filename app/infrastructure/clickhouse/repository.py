@@ -93,7 +93,7 @@ class ClickHouseQoeRepository:
 
     async def fetch_window(
         self, site_id: str, zone_id: str, window_start: Any
-    ) -> tuple | None:
+    ) -> tuple[Any, ...] | None:
         """Lee una ventana deduplicada. Pensado para tests y diagnostico."""
         rows = await self._client.query_rows(
             f"SELECT {', '.join(QOE_COLUMNS)} FROM {QOE_LATEST_VIEW} "

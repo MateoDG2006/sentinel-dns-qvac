@@ -137,10 +137,7 @@ def clickhouse_url() -> Iterator[str]:
     container = DockerContainer(CLICKHOUSE_IMAGE).with_exposed_ports(HTTP_PORT)
     container.with_env("CLICKHOUSE_SKIP_USER_SETUP", "1")
     with container:
-        url = (
-            f"http://{container.get_container_host_ip()}:"
-            f"{container.get_exposed_port(HTTP_PORT)}/"
-        )
+        url = f"http://{container.get_container_host_ip()}:{container.get_exposed_port(HTTP_PORT)}/"
         _wait_until_ready(url)
         for statement in _statements(INIT_SQL.read_text(encoding="utf-8")):
             _execute(url, statement)
@@ -201,8 +198,7 @@ def test_la_tabla_usa_replacingmergetree_ordenado_por_la_clave_de_ventana(
 ) -> None:
     engine = _execute(
         clickhouse_url,
-        "SELECT engine_full FROM system.tables "
-        "WHERE database='sentinel_dns' AND name='dns_qoe_1m'",
+        "SELECT engine_full FROM system.tables WHERE database='sentinel_dns' AND name='dns_qoe_1m'",
     )
     assert "ReplacingMergeTree(updated_at)" in engine
     assert "ORDER BY (site_id, zone_id, window_start)" in engine
@@ -339,9 +335,7 @@ def test_health_reporta_la_conexion_viva(repository: ClickHouseQoeRepository) ->
 def test_health_no_lanza_cuando_el_host_no_existe() -> None:
     """Un fallo de dependencia debe reportarse, nunca propagarse."""
     client = ClickHouseClient(
-        ClickHouseSettingsLike(
-            host="127.0.0.1", http_port=1, connect_timeout_seconds=1.0
-        )
+        ClickHouseSettingsLike(host="127.0.0.1", http_port=1, connect_timeout_seconds=1.0)
     )
     estado = asyncio.run(client.health())
     assert estado.healthy is False
