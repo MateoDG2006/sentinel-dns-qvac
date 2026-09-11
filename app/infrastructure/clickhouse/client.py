@@ -123,14 +123,18 @@ class ClickHouseClient:
         except Exception as exc:  # noqa: BLE001 - se reclasifica como recuperable
             raise ClickHouseUnavailableError(f"fallo al insertar en {table}: {exc}") from exc
 
-    async def query_rows(self, sql: str, parameters: dict[str, Any] | None = None) -> list[tuple]:
-        """Ejecuta una consulta y devuelve sus filas."""
+    async def query_rows(
+        self, sql: str, parameters: dict[str, Any] | None = None
+    ) -> list[tuple[Any, ...]]:
+        """Ejecuta una consulta y devuelve sus filas como tuplas."""
         client = await self._require()
         try:
             result = await asyncio.to_thread(client.query, sql, parameters or {})
         except Exception as exc:  # noqa: BLE001
             raise ClickHouseUnavailableError(f"fallo la consulta: {exc}") from exc
-        return list(result.result_rows)
+        # clickhouse-connect tipa las filas como Sequence; se convierten
+        # explicitamente para que el tipo declarado sea verdadero.
+        return [tuple(row) for row in result.result_rows]
 
     async def health(self) -> DependencyState:
         """Comprueba que la conexion responde. Nunca lanza."""
