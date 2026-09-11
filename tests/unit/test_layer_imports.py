@@ -69,3 +69,20 @@ def test_config_does_not_import_adapters() -> None:
     _assert_allowed(CONFIG_PATH, names, allow_core=True)
     assert "app.domain.enums" in names
     assert any(name.startswith("app.constants.") for name in names)
+
+
+def test_only_qvac_adapter_imports_sdk() -> None:
+    offenders: list[str] = []
+    for path in Path("app").rglob("*.py"):
+        names = _imported_modules(path)
+        if any(name == "tetherto" or name.startswith("tetherto.") for name in names):
+            if path.parts[:3] != ("app", "infrastructure", "qvac"):
+                offenders.append(str(path))
+    assert offenders == []
+
+
+def test_services_do_not_import_qvac_sdk() -> None:
+    for path in Path("app/services").glob("*.py"):
+        names = _imported_modules(path)
+        assert all(not name.startswith("tetherto") for name in names), path
+        assert "tetherto.qvac_sdk" not in names

@@ -1,0 +1,82 @@
+# Stack local de Sentinel-DNS.
+#
+# Alcance actual (tarea C1): Compose minimo con Kafka en modo KRaft de un nodo y
+# creacion de los topics congelados. Los servicios de ClickHouse, Grafana,
+# Prometheus y Wazuh se agregan en C3/C4 segun la spec seccion 16.
+#
+# Los nombres de servicio y puertos deben coincidir con los defaults de
+# app/core/config.py: el broker se llama `kafka` y escucha en 9092 dentro de la
+# red interna (SENTINEL_KAFKA__BOOTSTRAP_SERVERS=kafka:9092).
+
+name: sentinel-dns
+
+services:
+  kafka:
+    image: apache/kafka:3.8.1
+    container_name: sentinel-kafka
+    restart: unless-stopped
+    networks: [sentinel-net]
+    ports:
+      # Solo loopback. Listener extra para procesos que corren en el host
+      # (simulador y tests) mientras no esten dentro de Compose.
+      - "127.0.0.1:29092:29092"
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      # Los topics se crean explicitamente en kafka-init; no auto-crear.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+
+  # Crea los topics y termina. Los nombres estan congelados en
+  # app/constants/kafka.py: cambiarlos requiere un ADR.
+  kafka-init:
+    image: apache/kafka:3.8.1
+    container_name: sentinel-kafka-init
+    restart: "no"
+    networks: [sentinel-net]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -euo pipefail
+        crear() {
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 \
+            --create --if-not-exists --topic "$$1" --partitions "$$2" --replication-factor 1
+        }
+        crear dns.telemetry.normalized 3
+        crear sentinel.dns.dlq 1
+        crear sentinel.dns.groundtruth 1
+        echo "--- topics disponibles ---"
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+
+networks:
+  sentinel-net:
+    name: sentinel-net
+    driver: bridge
+
+volumes:
+  kafka-data:
+    name: sentinel-kafka-data
