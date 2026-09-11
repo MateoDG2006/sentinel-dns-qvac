@@ -1,8 +1,8 @@
 # Sentinel-DNS — comandos para la infra que existe hoy.
 #
-# Disponible: Kafka local (C1) + API/consumer/QVAC en el host (A2–A5).
-# Todavía no está en Compose: ClickHouse, Grafana, Prometheus, Wazuh (C3/C4, B).
-# El CLI del simulador (simulator/main.py) aún no publica a Kafka.
+# Disponible: Kafka local (C1), ClickHouse/Grafana (C3) y API/consumer/QVAC en el host.
+# Wazuh y los perfiles Compose full siguen en C4.
+# El CLI del simulador (simulator/main.py) publica a Kafka cuando el broker está up.
 #
 # Windows (PowerShell): GNU Make usa cmd.exe; las recetas evitan bash.
 # Linux/macOS: recetas POSIX.
@@ -12,6 +12,7 @@
 COMPOSE := docker compose
 UV := uv
 KAFKA_HOST_BOOTSTRAP := localhost:29092
+CLICKHOUSE_HOST := localhost
 API_HOST := 127.0.0.1
 API_PORT := 8000
 
@@ -30,7 +31,7 @@ help:
 	$(info   make down         Para el stack Compose)
 	$(info   make bootstrap    Descarga el GGUF a data/qvac (red; usa node_modules/@qvac/sdk))
 	$(info   make qvac-smoke   Comprueba cache local, no descarga)
-	$(info   make api          Uvicorn en $(API_HOST):$(API_PORT) contra Kafka del host)
+	$(info   make api          Uvicorn en $(API_HOST):$(API_PORT) contra Kafka/ClickHouse del host)
 	$(info   make dev          env + sync + up)
 	$(info   make check        ruff + mypy + pytest unit)
 	$(info   make test         pytest tests/unit)
@@ -101,12 +102,13 @@ qvac-smoke:
 
 ifeq ($(OS),Windows_NT)
 api: env
-	@echo API en http://$(API_HOST):$(API_PORT)/docs Kafka=$(KAFKA_HOST_BOOTSTRAP)
-	powershell -NoProfile -Command "$$env:SENTINEL_KAFKA__BOOTSTRAP_SERVERS='$(KAFKA_HOST_BOOTSTRAP)'; uv run uvicorn app.main:app --host $(API_HOST) --port $(API_PORT)"
+	@echo API en http://$(API_HOST):$(API_PORT)/docs Kafka=$(KAFKA_HOST_BOOTSTRAP) ClickHouse=$(CLICKHOUSE_HOST)
+	powershell -NoProfile -Command "$$env:SENTINEL_KAFKA__BOOTSTRAP_SERVERS='$(KAFKA_HOST_BOOTSTRAP)'; $$env:SENTINEL_CLICKHOUSE__HOST='$(CLICKHOUSE_HOST)'; uv run uvicorn app.main:app --host $(API_HOST) --port $(API_PORT)"
 else
 api: env
-	@echo API en http://$(API_HOST):$(API_PORT)/docs Kafka=$(KAFKA_HOST_BOOTSTRAP)
+	@echo API en http://$(API_HOST):$(API_PORT)/docs Kafka=$(KAFKA_HOST_BOOTSTRAP) ClickHouse=$(CLICKHOUSE_HOST)
 	SENTINEL_KAFKA__BOOTSTRAP_SERVERS=$(KAFKA_HOST_BOOTSTRAP) \
+		SENTINEL_CLICKHOUSE__HOST=$(CLICKHOUSE_HOST) \
 		$(UV) run uvicorn app.main:app --host $(API_HOST) --port $(API_PORT)
 endif
 

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from app.constants.api import HEALTH_LIVE_PATH, HEALTH_READY_PATH, METRICS_PATH
 from app.constants.health import (
     KAFKA_DISABLED_DETAIL,
-    OUTBOX_VOLATILE_DETAIL,
+    OUTBOX_SQLITE_DETAIL,
 )
 from app.constants.metrics import (
     EVENTS_TOTAL,
@@ -56,8 +56,8 @@ def test_health_ready_uses_live_adapters() -> None:
     assert by_name["kafka"]["detail"] == KAFKA_DISABLED_DETAIL
     assert by_name["qvac"]["status"] == DependencyStatus.DEGRADED.value
     assert by_name["qvac"]["detail"] != "adapter_not_implemented_heuristic_fallback_active"
-    assert by_name["outbox"]["status"] == DependencyStatus.DEGRADED.value
-    assert by_name["outbox"]["detail"] == OUTBOX_VOLATILE_DETAIL
+    assert by_name["outbox"]["status"] == DependencyStatus.UP.value
+    assert by_name["outbox"]["detail"] == OUTBOX_SQLITE_DETAIL
 
 
 async def test_health_ready_reports_qvac_and_kafka_up() -> None:

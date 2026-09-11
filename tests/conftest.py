@@ -19,8 +19,12 @@ def _unit_runtime(
     monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
 ) -> None:
     monkeypatch.setenv("SENTINEL_ENABLE_KAFKA_CONSUMER", "0")
+    monkeypatch.setenv("SENTINEL_ENABLE_WAZUH_DISPATCHER", "0")
+    monkeypatch.setenv("SENTINEL_ENABLE_QOE_FLUSH", "0")
     cache = tmp_path_factory.mktemp("qvac-cache")
     monkeypatch.setenv("QVAC_CACHE_DIR", str(cache))
+    outbox = tmp_path_factory.mktemp("outbox")
+    monkeypatch.setenv("SENTINEL_OUTBOX__PATH", str(outbox / "sentinel.db"))
     Settings.clear_cache()
     yield
     Settings.clear_cache()

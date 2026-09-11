@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -13,7 +13,7 @@ def _make_record(event_id: UUID | None = None) -> OutboxRecord:
         id=uuid4(),
         event_id=event_id or uuid4(),
         prediction_id=None,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         payload="{}",
         status=OutboxStatus.PENDING,
         attempts=0,
@@ -31,6 +31,14 @@ async def test_enqueue_dedupes_by_event_id(tmp_path):
         shared_event_id = uuid4()
         assert await outbox.enqueue(_make_record(shared_event_id)) is True
         assert await outbox.enqueue(_make_record(shared_event_id)) is False
+        operational = _make_record(shared_event_id)
+        operational = operational.model_copy(
+            update={"record_type": WazuhEventType.SENTINEL_OPERATIONAL}
+        )
+        assert await outbox.enqueue(operational) is True
+        health = await outbox.health()
+        assert health.status.value == "up"
+        assert await outbox.pending_count() == 2
     finally:
         await outbox.close()
 
@@ -61,7 +69,7 @@ async def test_claimed_but_undelivered_recovers_on_restart(tmp_path):
     await outbox.start()
     await outbox.enqueue(_make_record())
     await outbox.claim_batch(limit=10)  # claimed, then "crashes"
-    await outbox.close()               # before mark_delivered ever runs
+    await outbox.close()  # before mark_delivered ever runs
 
     restarted = SqliteOutbox(db_path)
     await restarted.start()  # must reset the stuck CLAIMED row
@@ -79,7 +87,7 @@ async def test_reschedule_increments_attempts_and_reopens_for_claim(tmp_path):
     try:
         await outbox.enqueue(_make_record())
         claimed = await outbox.claim_batch(limit=10)
-        already_due = datetime.now(timezone.utc)
+        already_due = datetime.now(UTC)
         await outbox.reschedule([claimed[0].id], already_due, reason="wazuh_503")
 
         reclaimed = await outbox.claim_batch(limit=10)

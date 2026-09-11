@@ -107,5 +107,11 @@ class SentinelMetrics:
     def set_outbox_pending(self, pending: float) -> None:
         self.outbox_pending.set(pending)
 
+    def increment_wazuh_delivery(self, *, status: str, amount: int = 1) -> None:
+        self.wazuh_delivery_total.labels(status=status).inc(amount)
+
+    def increment_qoe_flush(self, *, status: str, amount: int = 1) -> None:
+        self.qoe_flush_total.labels(status=status).inc(amount)
+
     def render(self) -> bytes:
         return generate_latest(self.registry)

@@ -4,3 +4,4 @@ from typing import Final
 
 DATABASE: Final[str] = "sentinel_dns"
 QOE_TABLE: Final[str] = "dns_qoe_1m"
+QOE_FLUSH_POLL_SECONDS: Final[float] = 5.0

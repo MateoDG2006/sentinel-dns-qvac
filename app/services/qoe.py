@@ -7,9 +7,8 @@ muestras, para que un operador pueda auditar por que una zona esta en rojo.
 Diseno:
 
 - Los umbrales viven en ``config/qoe_thresholds.yaml``, nunca en el codigo.
-- El nucleo opera sobre :class:`QoeSample`, un tipo propio del servicio con los
-  campos minimos que necesita el calculo. La traduccion desde
-  ``NormalizedDnsEvent`` se hace en el borde, cuando A1 este disponible.
+- El nucleo opera sobre :class:`QoeSample`. :class:`DnsQoeSink` traduce
+  ``NormalizedDnsEvent`` en el borde de composicion.
 - Convencion de rcode acordada con el frente A: un timeout llega como
   ``rcode="TIMEOUT"`` con ``timed_out=True`` y sin latencia. Los tres buckets
   de fallo son excluyentes, de modo que ningun evento se cuenta dos veces.
@@ -26,6 +25,8 @@ from typing import Any
 
 import yaml
 
+from app.domain.schemas import NormalizedDnsEvent
+
 __all__ = [
     "RCODE_NXDOMAIN",
     "RCODE_SERVFAIL",
@@ -36,6 +37,7 @@ __all__ = [
     "QoeSample",
     "QoeWindowResult",
     "QoeAggregator",
+    "DnsQoeSink",
     "load_thresholds",
     "normalize",
     "subscore",
@@ -413,3 +415,22 @@ class QoeAggregator:
             if math.isclose(score, worst):
                 return cause
         return CAUSE_SATURATION
+
+
+class DnsQoeSink:
+    """QoeSink adapter: NormalizedDnsEvent -> QoeAggregator."""
+
+    def __init__(self, aggregator: QoeAggregator) -> None:
+        self.aggregator = aggregator
+
+    def observe(self, event: NormalizedDnsEvent) -> None:
+        self.aggregator.observe(
+            QoeSample(
+                event_ts=event.event_ts,
+                site_id=event.site_id,
+                zone_id=event.zone_id,
+                rcode=event.rcode,
+                latency_ms=event.latency_ms,
+                timed_out=event.timed_out,
+            )
+        )

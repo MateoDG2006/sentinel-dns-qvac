@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
 import aiosqlite
 
-from app.domain.enums import OutboxStatus, WazuhEventType
-from app.domain.schemas import OutboxRecord
+from app.constants.health import OUTBOX_DEPENDENCY_NAME, OUTBOX_SQLITE_DETAIL
+from app.domain.enums import DependencyStatus, OutboxStatus, WazuhEventType
+from app.domain.schemas import DependencyHealth, OutboxRecord
+from app.utils.time import UtcDateTime
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS outbox (
@@ -26,13 +28,13 @@ CREATE TABLE IF NOT EXISTS outbox (
     next_retry_at TEXT,
     claimed_at TEXT
 );
-CREATE UNIQUE INDEX IF NOT EXISTS ux_outbox_event_id ON outbox(event_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_outbox_event_id_type ON outbox(event_id, record_type);
 CREATE INDEX IF NOT EXISTS ix_outbox_status_retry ON outbox(status, next_retry_at);
 """
 
 
 def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class SqliteOutbox:
@@ -48,9 +50,18 @@ class SqliteOutbox:
         self._conn: aiosqlite.Connection | None = None
 
     async def start(self) -> None:
+        Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = await aiosqlite.connect(self._db_path)
         self._conn.row_factory = aiosqlite.Row
         await self._conn.executescript(_SCHEMA)
+        # VolatileOutbox and PredictionService key rows by (event_id, record_type)
+        # so a dns_threat and a sentinel_operational alert can coexist. B1's first
+        # unique index was event_id only; drop it on existing files.
+        await self._conn.execute("DROP INDEX IF EXISTS ux_outbox_event_id")
+        await self._conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_outbox_event_id_type "
+            "ON outbox(event_id, record_type)"
+        )
         # A row stuck in CLAIMED means the process died between
         # claim_batch() and mark_delivered()/reschedule()/mark_dead().
         # Reset it to PENDING on startup -- this is what makes
@@ -91,9 +102,42 @@ class SqliteOutbox:
             ),
         )
         await self._conn.commit()
-        # rowcount is 0 when the UNIQUE(event_id) index silently
-        # rejected the insert -- i.e. this event_id was already there.
+        # rowcount is 0 when UNIQUE(event_id, record_type) rejected the insert.
         return cursor.rowcount == 1
+
+    async def pending_count(self) -> int:
+        assert self._conn is not None, "call start() first"
+        cursor = await self._conn.execute(
+            "SELECT COUNT(*) FROM outbox WHERE status IN (?, ?)",
+            (OutboxStatus.PENDING.value, OutboxStatus.CLAIMED.value),
+        )
+        row = await cursor.fetchone()
+        return int(row[0]) if row is not None else 0
+
+    async def health(self) -> DependencyHealth:
+        checked_at = UtcDateTime.ensure(datetime.now(UTC))
+        if self._conn is None:
+            return DependencyHealth(
+                name=OUTBOX_DEPENDENCY_NAME,
+                status=DependencyStatus.DOWN,
+                detail="not_started",
+                checked_at=checked_at,
+            )
+        try:
+            await self._conn.execute("SELECT 1")
+        except aiosqlite.Error as exc:
+            return DependencyHealth(
+                name=OUTBOX_DEPENDENCY_NAME,
+                status=DependencyStatus.DOWN,
+                detail=type(exc).__name__,
+                checked_at=checked_at,
+            )
+        return DependencyHealth(
+            name=OUTBOX_DEPENDENCY_NAME,
+            status=DependencyStatus.UP,
+            detail=OUTBOX_SQLITE_DETAIL,
+            checked_at=checked_at,
+        )
 
     async def claim_batch(self, limit: int) -> list[OutboxRecord]:
         assert self._conn is not None, "call start() first"
@@ -129,9 +173,7 @@ class SqliteOutbox:
         )
         await self._conn.commit()
 
-    async def reschedule(
-        self, ids: list[UUID], retry_at: datetime, reason: str
-    ) -> None:
+    async def reschedule(self, ids: list[UUID], retry_at: datetime, reason: str) -> None:
         if not ids:
             return
         assert self._conn is not None, "call start() first"
@@ -176,9 +218,7 @@ def _row_to_record(row: aiosqlite.Row) -> OutboxRecord:
         status=OutboxStatus(row["status"]),
         attempts=row["attempts"],
         next_retry_at=(
-            datetime.fromisoformat(row["next_retry_at"])
-            if row["next_retry_at"]
-            else None
+            datetime.fromisoformat(row["next_retry_at"]) if row["next_retry_at"] else None
         ),
         last_reason=row["last_reason"],
         record_type=WazuhEventType(row["record_type"]),
